@@ -5,7 +5,7 @@ A reproduction of the Fin-GAN methodology of Vuletić & Cont (2023), applied to 
 ## Repository layout
 
 ```text
-├── configs/               experiment configuration
+├── configs/               reference experiment configuration
 ├── data/                  local/downloaded market data
 ├── docs/                  methodology and reproduction notes
 ├── experiments/           experiment documentation
@@ -19,7 +19,7 @@ A reproduction of the Fin-GAN methodology of Vuletić & Cont (2023), applied to 
 │   ├── evaluation/        metrics and backtests
 │   ├── experiments/       experiment orchestration
 │   ├── utils/             shared utilities
-│   └── legacy.py          original monolithic implementation
+│   └── legacy.py          compatibility re-exports for old imports
 ├── tests/                 automated tests
 └── stocks-etfs-list.csv   ticker/benchmark metadata
 ```
@@ -36,7 +36,7 @@ The Fin-GAN methodology, model name, ForGAN-based architecture, and economics-dr
 
 ## Data
 
-`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/`. Downloaded market data is local runtime data and should not be committed.
+`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/` with `scripts/download_data.py`. The downloader writes the adjusted `AdjOpen`/`AdjClose` schema expected by the return-construction code. Downloaded market data is local runtime data and should not be committed.
 
 ## Results
 
@@ -50,8 +50,21 @@ Install the dependencies:
 pip install -r requirements.txt
 ```
 
-Then download data and run the experiment script from the repository root. The scripts use project-relative paths rather than machine-specific absolute paths.
+Download data from the repository root:
+
+```bash
+python scripts/download_data.py
+```
+
+Run a smoke test before a full experiment:
+
+```bash
+pytest -q
+python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --gradient-epochs 1 --cpu
+```
+
+For longer runs, increase the epoch arguments in `scripts/run_experiment.py` or use an equivalent command-line invocation. `configs/default.yaml` documents the intended default hyperparameters; the current runner is CLI-driven and does not automatically load that YAML file.
 
 ## Reproducibility notes
 
-The archived research implementation has known limitations, including the adaptive gradient-norm weighting calculation and the absence of a realized directional-accuracy metric. These should be corrected in a separate correctness pass so historical results are not silently changed during structural cleanup.
+The repository now has a separated training/evaluation implementation plus a compatibility shim for historical imports. Historical checkpoints and result files are retained so structural cleanup does not overwrite archived artifacts. The one-epoch command above is a pipeline smoke test, not a performance benchmark.
