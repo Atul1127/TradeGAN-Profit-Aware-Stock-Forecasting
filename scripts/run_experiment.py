@@ -28,7 +28,7 @@ def _set_seed(seed: int) -> None:
 
 
 def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
-    """Select by validation Sharpe and compare against explicit baselines."""
+    """Select the GAN objective by validation Sharpe and compare baselines."""
     gan = gan.copy()
     lstm = lstm.copy()
 
@@ -49,9 +49,8 @@ def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
     for baseline_name, baseline in baselines:
         candidate_pnl = float(selected_fin["PnL_w"])
         baseline_pnl = float(baseline.get("PnL_w", baseline.get("PnL_m test")))
-        candidate_mse = float(selected_fin["RMSE"]) ** 2
-        baseline_rmse = float(baseline["RMSE"])
-        baseline_mse = baseline_rmse**2
+        candidate_mse = float(selected_fin["MSE"])
+        baseline_mse = float(baseline["MSE"])
         candidate_std = float(selected_fin["PnL STD"])
         baseline_std = float(baseline["PnL STD"])
 
@@ -68,7 +67,12 @@ def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
                     baseline.get("SR_w scaled", baseline.get("SR_m scaled test"))
                 ),
                 "directional_accuracy": float(selected_fin["Directional Accuracy"]),
+                "baseline_directional_accuracy": float(baseline["Directional Accuracy"]),
+                "test_mse": candidate_mse,
+                "baseline_mse": baseline_mse,
                 "mse_reduction_pct": percent_reduction(candidate_mse, baseline_mse),
+                "test_pnl_std": candidate_std,
+                "baseline_pnl_std": baseline_std,
                 "pnl_std_reduction_pct": percent_reduction(candidate_std, baseline_std),
             }
         )
