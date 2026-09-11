@@ -112,7 +112,6 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
 │   ├── reproduction.md
 │   └── TradeGAN.pdf
 ├── results/
-│   ├── checkpoints/
 │   ├── figures/
 │   └── metrics/
 ├── scripts/
@@ -128,8 +127,7 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
 │       ├── training/
 │       ├── utils/
 │       ├── fixed_experiment.py
-│       ├── lstm_model.py
-│       └── legacy.py
+│       └── lstm_model.py
 ├── tests/
 ├── stocks-etfs-list.csv
 ├── pyproject.toml
@@ -168,7 +166,7 @@ Market data is treated as local runtime data rather than a committed repository 
 ### Smoke test
 
 ```bash
-python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --gradient-epochs 1 --cpu
+python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --gradient-epochs 1 --seed 42 --cpu
 ```
 
 ### Controlled research experiment
@@ -195,7 +193,6 @@ The expanded local test suite currently contains **16 tests** covering objective
 | --- | --- |
 | `results/metrics/` | CSV metrics, PnL series, and experiment summaries |
 | `results/figures/` | PnL, return, and distribution plots |
-| `results/checkpoints/` | Trained model checkpoints |
 | `docs/TradeGAN.pdf` | Preserved research write-up |
 
 ## Reproducibility
