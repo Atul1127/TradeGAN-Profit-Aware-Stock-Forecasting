@@ -20,7 +20,7 @@ env/
 /data/raw/
 /data/processed/
 
-# Local/generated experiment artifacts
+# Generated experiment artifacts
 /results/checkpoints/
 /results/runs/
 
