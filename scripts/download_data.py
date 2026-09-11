@@ -42,9 +42,11 @@ def download_data(
                 continue
 
             data = data[["Open", "Close"]].copy()
-            data.columns = ["AdjOpen", "AdjClose"]
+            data.columns = ["Open", "Close"]
             data.reset_index(inplace=True)
             data.rename(columns={"Date": "date"}, inplace=True)
+            data = data.dropna(subset=["date", "Open", "Close"])
+            data = data.sort_values("date").drop_duplicates("date", keep="last")
 
             base_ticker = ticker[:-len(exchange_suffix)] if ticker.endswith(exchange_suffix) else ticker
             output_file = output_dir / f"{base_ticker}.csv"
