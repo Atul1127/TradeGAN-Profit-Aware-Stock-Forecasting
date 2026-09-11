@@ -1,107 +1,125 @@
-# TradeGAN — Profit-Aware Stock Forecasting
+# TradeGAN
 
-A clean, modular implementation of the **Fin-GAN** methodology of Vuletić & Cont (2023), applied to **half-day excess log-returns for TCS relative to the Nifty IT benchmark**.
+**A reproduction/application of the Fin-GAN methodology of Vuletić & Cont (2023), applied to half-day TCS excess log-returns against the Nifty IT benchmark (`^CNXIT`).**
 
-> **Research note:** Results depend on the data window, split, random seed, training configuration, objective, and evaluation protocol. Numbers below are experimental observations from this repository and should not be interpreted as universal benchmarks.
+> ### Attribution
+> The Fin-GAN methodology, model name, ForGAN-based architecture, and economics-driven generator objectives originate with Milena Vuletić and Rama Cont, *Fin-GAN: Forecasting and Classifying Financial Time Series via Generative Adversarial Networks* (2023). This repository is a reproduction/application and is not the original implementation.
 
-## Highlights
+## What it does
 
-- Conditional GAN for financial time-series forecasting.
-- LSTM-based generator/discriminator architecture.
-- Profit-aware objectives combining adversarial learning with **MSE, PnL, Sharpe ratio, and return-volatility terms**.
-- Differentiable `tanh` surrogate for sign-based trading objectives.
-- Separate modules for data, models, objectives, training, evaluation, and experiment orchestration.
-- Preserved research figures, metrics, checkpoints, and original PDF write-up.
-- Automated tests covering objectives, model behavior, training updates, evaluation, validation, and checkpoints.
+TradeGAN uses an LSTM-based conditional GAN to forecast **half-day excess log-returns** for TCS relative to the Nifty IT index.
 
-## Experimental results
+The central idea is to optimize the generator for both forecast quality and trading performance rather than relying only on conventional prediction error.
 
-A full TCS run was completed locally using 100 GAN epochs, 500 LSTM epochs, and CPU execution. The repository's consolidated result files contain results for multiple objective variants.
+| Objective term | What it rewards |
+| --- | --- |
+| `MSE` | Forecast accuracy |
+| `PnL` | Profit from trading the predicted sign |
+| `SR` | Sharpe ratio of the trading strategy |
+| `STD` | Lower PnL volatility |
+| `BCE` | Adversarial realism |
 
-### Representative held-out results
+Trading-sign objectives use a differentiable `tanh` surrogate so PnL- and Sharpe-based terms can contribute gradients during training.
 
-| Model | Objective | Test PnL | Scaled Sharpe | RMSE | MAE |
-| --- | --- | ---: | ---: | ---: | ---: |
-| GAN | SR MSE | 9.8626 | 2.0030 | 0.10053 | 0.08667 |
-| LSTM | STD | 12.3147 | 2.3564 | 0.00633 | 0.00452 |
+## Results
 
-These rows come from the consolidated experiment metrics and are intended to show the observed scale of performance across objective choices. The best PnL, best Sharpe, and lowest forecasting error do not necessarily occur for the same model or objective.
+One completed TCS run evaluated multiple GAN objectives on the same held-out test region. The consolidated experiment metrics are preserved under `results/metrics/`.
 
-### Research-comparison run
+### GAN objective comparison
 
-A later controlled run added explicit baseline comparison and research metrics. Its selected GAN configuration produced:
+| Objective | Test PnL | Test Sharpe | Test RMSE | Test MAE |
+| --- | ---: | ---: | ---: | ---: |
+| `MSE` | −4.25 | −0.96 | 0.00966 | 0.00767 |
+| `BCE` | −4.19 | −0.94 | 0.00965 | 0.00767 |
+| `PnL MSE` | 0.93 | 0.82 | **0.00648** | 0.00467 |
+| `PnL MSE STD` | 3.22 | 1.31 | **0.00648** | 0.00467 |
+| `PnL MSE SR` | 3.35 | 0.85 | 0.00685 | 0.00513 |
+| `PnL` | 1.35 | 1.15 | 0.00653 | 0.00465 |
+| `PnL SR` | 3.40 | 0.76 | 0.00743 | 0.00576 |
+| `PnL STD` | 8.93 | 1.67 | 0.12479 | 0.12292 |
+| `SR` | 8.93 | 1.67 | 0.47092 | 0.47001 |
+| **`SR MSE`** | **9.86** | **2.00** | 0.10053 | 0.08667 |
 
-- **Test PnL:** 15.1996
-- **Scaled Sharpe:** 6.4154
-- **PnL fold change:** 2.369× versus the reported ForGAN baseline
-- **PnL fold change:** 2.572× versus the reported LSTM baseline
+### LSTM baseline
 
-The comparison output also reported **88.46% directional accuracy** in the LSTM comparison row. However, that generated CSV currently contains inconsistent metric alignment across rows/columns, so these comparison figures are treated as **exploratory rather than final validated benchmark claims**. They are kept here for transparency and are not used to claim a definitive 3.18 Sharpe / 85% accuracy / 2.88× PnL result.
+The strongest observed LSTM configuration in the consolidated results was:
 
-## Architecture
+| Objective | Test PnL | Test Sharpe | Test RMSE | Test MAE |
+| --- | ---: | ---: | ---: | ---: |
+| **`STD`** | **12.31** | **2.36** | **0.00633** | **0.00452** |
 
-```mermaid
-flowchart LR
-    A[Market data] --> B[Return construction]
-    B --> C[Train / validation / test split]
-    C --> D[Conditional GAN]
-    D --> E[Generator]
-    D --> F[Discriminator]
-    E --> G[Trading-aware objective]
-    G --> H[Training]
-    H --> I[Evaluation & backtest metrics]
-    I --> J[Metrics / figures / checkpoints]
-```
+### What the results show
 
-The active implementation lives under `src/tradegan/` and is split by responsibility rather than kept in one monolithic script.
+The experiment demonstrates the intended trade-off between **forecasting accuracy and trading performance**.
+
+The error-focused `MSE` and `BCE` objectives produced negative test PnL and negative Sharpe in this run. Adding trading-oriented terms produced positive trading results, with `SR MSE` reaching the strongest observed GAN Sharpe (**2.00**) and PnL (**9.86**) among the consolidated GAN rows.
+
+At the same time, the `SR MSE` model has substantially worse forecasting error than the best error-oriented configurations. The `PnL MSE` / `PnL MSE STD` family provides a stronger compromise between forecast error and trading performance, while the LSTM `STD` baseline achieved the lowest RMSE/MAE and the highest Sharpe among the specific configurations reported here.
+
+**The key point:** a model that forecasts best is not necessarily the model that trades best. The objective function materially changes that trade-off.
+
+### Experimental caveat
+
+These are **run-specific observations**, not universal benchmarks. They depend on the data snapshot, train/validation/test split, random seed, model configuration, training duration, and evaluation convention.
+
+A later research-comparison run also produced exploratory metrics such as **15.1996 test PnL**, **6.4154 scaled Sharpe**, and reported PnL fold changes versus baseline models. Because the generated comparison output contained inconsistent metric alignment across rows, those numbers are **not presented as validated benchmark claims** here.
+
+The repository also does **not** claim a `3.18` Sharpe ratio, `85%` directional accuracy, or `2.88×` PnL improvement as verified results.
 
 ## Method
 
 TradeGAN forecasts excess returns rather than raw prices:
 
-1. Load adjusted prices for the target security and benchmark.
-2. Construct half-day returns and excess returns.
-3. Create train, validation, and test regions.
+1. Load adjusted TCS and benchmark prices.
+2. Construct interleaved half-day returns and excess returns.
+3. Split the observations into training, validation, and test regions.
 4. Train conditional GAN and LSTM models.
-5. Optimize adversarial and economics-aware objectives involving MSE, PnL, Sharpe ratio, and volatility.
+5. Optimize adversarial and economics-aware objectives.
 6. Evaluate forecasting and trading metrics on held-out data.
 
-The historical implementation uses a differentiable `tanh` surrogate so trading-oriented terms can contribute gradients during optimization.
+The historical implementation uses a differentiable `tanh` surrogate for sign-based trading objectives so PnL and Sharpe terms can participate in gradient-based optimization.
 
-## Repository structure
+## Known limitations
+
+1. Results come from a limited experimental setting and should not be interpreted as statistical evidence of generalization.
+2. Different objectives optimize different goals, so “best” depends on the metric being evaluated.
+3. Trading metrics and forecasting metrics must be compared under the same test window and conventions.
+4. Directional accuracy is not used as a headline result in the consolidated experiment table.
+5. The exploratory research-comparison output requires further validation before its metrics should be used as benchmark claims.
+
+## Repository layout
 
 ```text
 .
 ├── docs/
-│   ├── methodology.md        # method and implementation notes
-│   ├── reproduction.md       # reproduction workflow
-│   └── TradeGAN.pdf          # preserved research write-up
+│   ├── methodology.md
+│   ├── reproduction.md
+│   └── TradeGAN.pdf
 ├── results/
-│   ├── checkpoints/          # saved model checkpoints
-│   ├── figures/              # plots
-│   └── metrics/              # CSV metrics and experiment results
+│   ├── checkpoints/
+│   ├── figures/
+│   └── metrics/
 ├── scripts/
-│   ├── download_data.py      # market-data downloader
-│   └── run_experiment.py     # main CLI entry point
-├── src/tradegan/
-│   ├── data/                 # market data, returns, splits
-│   ├── evaluation/           # evaluation utilities
-│   ├── experiments/          # experiment orchestration/adapters
-│   ├── models/               # GAN and LSTM models
-│   ├── objectives/           # objective functions and calibration
-│   ├── training/             # training engines
-│   ├── utils/                # tensor and trading utilities
-│   ├── fixed_experiment.py   # active runner
-│   ├── lstm_model.py         # active/compatibility LSTM implementation
-│   └── legacy.py             # backward-compatible exports
-├── tests/                    # automated tests
-├── stocks-etfs-list.csv      # ticker / benchmark metadata
+│   ├── download_data.py
+│   └── run_experiment.py
+├── src/
+│   └── tradegan/
+│       ├── data/
+│       ├── evaluation/
+│       ├── experiments/
+│       ├── models/
+│       ├── objectives/
+│       ├── training/
+│       ├── utils/
+│       ├── fixed_experiment.py
+│       ├── lstm_model.py
+│       └── legacy.py
+├── tests/
+├── stocks-etfs-list.csv
 ├── pyproject.toml
 ├── requirements.txt
 └── README.md
 ```
-
-Downloaded market data is intentionally kept as local runtime data and is not part of the public repository tree.
 
 ## Installation
 
@@ -117,94 +135,61 @@ Or install the package in editable mode:
 python -m pip install -e .
 ```
 
-Using a virtual environment is recommended.
-
 ## Data
 
-`stocks-etfs-list.csv` stores ticker-to-benchmark metadata. For the TCS experiment, the benchmark is the Nifty IT index.
+`stocks-etfs-list.csv` stores ticker-to-benchmark metadata. For the documented experiment, TCS is evaluated against the Nifty IT index.
 
-Download the required market data with:
+Download market data with:
 
 ```bash
 python scripts/download_data.py
 ```
 
-The downloader writes the adjusted-price columns expected by the return-construction pipeline.
+Market data is treated as local runtime data rather than a committed repository artifact.
 
-## Tests
+## Run
 
-Run the full test suite with:
-
-```bash
-pytest -q
-```
-
-The current refactored implementation has been validated locally with:
-
-```text
-14 passed
-```
-
-## Smoke test
-
-Use a short CPU run before an expensive experiment:
+### Smoke test
 
 ```bash
 python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --gradient-epochs 1 --cpu
 ```
 
-This verifies that data loading, training, evaluation, and output writing work. It is **not** a performance benchmark.
-
-## Full experiment
-
-A representative longer run is:
+### Full experiment
 
 ```bash
-python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 25 --seed 42 --cpu
+python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 100 --cpu
 ```
 
-The runner supports explicit control of ticker, epoch counts, batch size, gradient-calibration iterations, seed, and CPU/GPU execution.
+The documented consolidated results were obtained from a completed TCS run using **100 GAN epochs, 500 LSTM epochs, and 10 gradient-calibration epochs**.
+
+## Tests
+
+Run:
+
+```bash
+pytest -q
+```
+
+The expanded local test suite contains **14 tests** covering objectives, model behavior, training updates, evaluation, validation, metrics, and checkpoint round-trips.
 
 ## Outputs
 
 | Path | Contents |
 | --- | --- |
-| `results/metrics/` | tabular metrics, PnL series, and experiment summaries |
-| `results/figures/` | cumulative PnL and distribution plots |
-| `results/checkpoints/` | trained generator/LSTM checkpoints |
-| `docs/TradeGAN.pdf` | preserved original write-up |
+| `results/metrics/` | CSV metrics, PnL series, and experiment summaries |
+| `results/figures/` | PnL, return, and distribution plots |
+| `results/checkpoints/` | Trained model checkpoints |
+| `docs/TradeGAN.pdf` | Preserved research write-up |
 
 ## Reproducibility
 
-For a meaningful comparison, keep the following fixed and record them with every experiment:
+For meaningful comparisons, record the ticker and benchmark, data window, train/validation/test split, random seed, objective, model dimensions, learning rates, epoch counts, gradient-calibration iterations, device, and evaluation convention.
 
-- ticker and benchmark
-- data window and split
-- random seed
-- model dimensions
-- learning rates and batch size
-- gradient-calibration iterations
-- objective definition
-- evaluation window and trading convention
-- CPU/GPU device
-- data snapshot/download date
+See [`docs/reproduction.md`](docs/reproduction.md) for the reproduction workflow.
 
-See [`docs/reproduction.md`](docs/reproduction.md) for the workflow.
+## Reference
 
-## Interpreting the results
+Vuletić, M. and Cont, R. (2023). *Fin-GAN: Forecasting and Classifying Financial Time Series via Generative Adversarial Networks.*
 
-This project studies the trade-off between forecasting accuracy and trading performance. A model with lower MSE does not necessarily have higher PnL or Sharpe, and a favorable result from one test run does not establish statistical robustness.
-
-When reporting results, compare models under the same data split, evaluation window, trading convention, scaling convention, and random-seed protocol. Report the baseline and the exact metric definition alongside every headline number.
-
-## Attribution
-
-The Fin-GAN methodology and economics-driven objective design are based on:
-
-**Milena Vuletić and Rama Cont, _Fin-GAN: Forecasting and Classifying Financial Time Series via Generative Adversarial Networks_ (2023).**
-
-This repository is a reproduction/application and is not the original implementation.
-
-## Project status
-
-The original monolithic implementation has been reorganized into focused modules while preserving compatibility shims and historical research artifacts. The current focus is **readability, testability, reproducibility, and transparent reporting of experimental results**.
+Please cite the original research for the methodology and distinguish reproduced results from newly generated experiments.
