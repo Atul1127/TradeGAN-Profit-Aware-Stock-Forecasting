@@ -79,7 +79,7 @@ def test_objective_formulas_are_correct():
     assert gan_loss_pnl_mse(bce, alpha, pnl, beta, mse).item() == pytest.approx(1.4)
     assert gan_loss_pnl_mse_sr(bce, alpha, pnl, beta, mse, gamma, sr).item() == pytest.approx(0.2)
     assert gan_loss_pnl_mse_std(bce, alpha, pnl, beta, mse, delta, std).item() == pytest.approx(3.4)
-    assert gan_loss_pnl_sr(bce, alpha, pnl, gamma, sr).item() == pytest.approx(-0.2)
+    assert gan_loss_pnl_sr(bce, alpha, pnl, gamma, sr).item() == pytest.approx(-0.4)
     assert gan_loss_pnl_std(bce, alpha, pnl, delta, std).item() == pytest.approx(2.8)
     assert gan_loss_mse(bce, beta, mse).item() == pytest.approx(1.6)
     assert gan_loss_sr(bce, gamma, sr).item() == pytest.approx(-0.2)
@@ -132,32 +132,9 @@ def test_training_loops_update_parameters():
     before = {name: value.detach().clone() for name, value in generator.state_dict().items()}
 
     TrainLoopForGAN(
-        generator,
-        discriminator,
-        gen_opt,
-        disc_opt,
-        criterion,
-        0,
-        0,
-        0,
-        0,
-        1,
-        0,
-        train_data,
-        train_data,
-        8,
-        4,
-        4,
-        3,
-        1e-3,
-        1e-3,
-        1,
-        4,
-        1,
-        1,
-        100,
-        "cpu",
-        False,
+        generator, discriminator, gen_opt, disc_opt, criterion,
+        0, 0, 0, 0, 1, 0, train_data, train_data,
+        8, 4, 4, 3, 1e-3, 1e-3, 1, 4, 1, 1, 100, "cpu", False,
     )
     assert any(not torch.equal(before[name], value) for name, value in generator.state_dict().items())
 
@@ -166,32 +143,9 @@ def test_training_loops_update_parameters():
     disc_opt2 = torch.optim.RMSprop(discriminator2.parameters(), lr=1e-3)
     before2 = {name: value.detach().clone() for name, value in generator2.state_dict().items()}
     TrainLoopMainPnLnv(
-        generator2,
-        discriminator2,
-        gen_opt2,
-        disc_opt2,
-        criterion,
-        1.0,
-        0.0,
-        0.0,
-        0.0,
-        1,
-        0,
-        train_data,
-        train_data,
-        8,
-        4,
-        4,
-        3,
-        1e-3,
-        1e-3,
-        1,
-        4,
-        1,
-        1,
-        100,
-        "cpu",
-        False,
+        generator2, discriminator2, gen_opt2, disc_opt2, criterion,
+        1.0, 0.0, 0.0, 0.0, 1, 0, train_data, train_data,
+        8, 4, 4, 3, 1e-3, 1e-3, 1, 4, 1, 1, 100, "cpu", False,
     )
     assert any(not torch.equal(before2[name], value) for name, value in generator2.state_dict().items())
 
@@ -203,54 +157,16 @@ def test_lstm_training_and_gradient_calibration_are_finite():
     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
 
     model, optimizer, alpha, beta, gamma, delta = GradientCheckLSTM(
-        "TCS",
-        model,
-        optimizer,
-        1,
-        train_data,
-        8,
-        4,
-        4,
-        0,
-        1e-3,
-        1e-3,
-        1,
-        4,
-        1,
-        1,
-        100,
-        "cpu",
-        False,
+        "TCS", model, optimizer, 1, train_data, 8, 4, 4, 0,
+        1e-3, 1e-3, 1, 4, 1, 1, 100, "cpu", False,
     )
     for value in (alpha, beta, gamma, delta):
         assert torch.isfinite(value)
 
     before = {name: value.detach().clone() for name, value in model.state_dict().items()}
     model, optimizer = TrainLoopnLSTMPnL(
-        model,
-        optimizer,
-        False,
-        alpha,
-        beta,
-        gamma,
-        delta,
-        1,
-        0,
-        train_data,
-        train_data,
-        8,
-        4,
-        4,
-        0,
-        1e-3,
-        1e-3,
-        1,
-        4,
-        1,
-        1,
-        100,
-        "cpu",
-        False,
+        model, optimizer, False, alpha, beta, gamma, delta, 1, 0,
+        train_data, train_data, 8, 4, 4, 0, 1e-3, 1e-3, 1, 4, 1, 1, 100, "cpu", False,
     )
     assert any(not torch.equal(before[name], value) for name, value in model.state_dict().items())
 
@@ -259,27 +175,8 @@ def test_lstm_training_and_gradient_calibration_are_finite():
     disc_opt = torch.optim.RMSprop(discriminator.parameters(), lr=1e-3)
     criterion = nn.BCELoss()
     *_, gan_alpha, gan_beta, gan_gamma, gan_delta = GradientCheck(
-        "TCS",
-        generator,
-        discriminator,
-        gen_opt,
-        disc_opt,
-        criterion,
-        1,
-        train_data,
-        8,
-        4,
-        4,
-        3,
-        1e-3,
-        1e-3,
-        1,
-        4,
-        1,
-        1,
-        100,
-        "cpu",
-        False,
+        "TCS", generator, discriminator, gen_opt, disc_opt, criterion, 1,
+        train_data, 8, 4, 4, 3, 1e-3, 1e-3, 1, 4, 1, 1, 100, "cpu", False,
     )
     for value in (gan_alpha, gan_beta, gan_gamma, gan_delta):
         assert torch.isfinite(value)
@@ -314,7 +211,7 @@ def test_evaluation_runs_with_small_mc_sample_count():
 def test_data_validation_rejects_invalid_inputs(tmp_path):
     with pytest.raises(ValueError, match="tr must be between"):
         _validate_split_args(0.0, 0.1, 1, 4, 1)
-    with pytest.raises(ValueError, match="tr \+ vl"):
+    with pytest.raises(ValueError, match=r"tr \+ vl"):
         _validate_split_args(0.9, 0.1, 1, 4, 1)
     with pytest.raises(ValueError, match="positive"):
         _validate_split_args(0.8, 0.1, 0, 4, 1)
