@@ -42,6 +42,7 @@ from tradegan.utils.trading_metrics import (
     percent_reduction,
     pnl_std,
 )
+from scripts.run_experiment import _research_comparison
 
 
 def _tiny_gan(batch: int = 8, lookback: int = 4, z_dim: int = 3, hidden: int = 4):
@@ -238,6 +239,62 @@ def test_research_metric_helpers():
         percent_reduction(1.0, 0.0)
     with pytest.raises(ValueError):
         fold_change(1.0, 0.0)
+
+
+def test_research_comparison_uses_validation_selection_and_aligned_test_rows(tmp_path, monkeypatch):
+    gan = pd.DataFrame(
+        [
+            {
+                "ticker": "TCS", "type": "ForGAN", "SR_w scaled val": 0.1,
+                "SR_w scaled": 0.2, "PnL_w": 5.0, "MSE": 0.010,
+                "PnL STD": 2.0, "Directional Accuracy": 0.50,
+                "MSE val": 0.01, "PnL_w val": 1.0, "PnL STD val": 1.0,
+                "Directional Accuracy val": 0.50,
+            },
+            {
+                "ticker": "TCS", "type": "PnL MSE", "SR_w scaled val": 1.0,
+                "SR_w scaled": 2.5, "PnL_w": 12.0, "MSE": 0.004,
+                "PnL STD": 1.5, "Directional Accuracy": 0.80,
+                "MSE val": 0.004, "PnL_w val": 3.0, "PnL STD val": 1.4,
+                "Directional Accuracy val": 0.75,
+            },
+            {
+                "ticker": "TCS", "type": "SR", "SR_w scaled val": 0.9,
+                "SR_w scaled": 4.0, "PnL_w": 20.0, "MSE": 0.020,
+                "PnL STD": 5.0, "Directional Accuracy": 0.90,
+                "MSE val": 0.02, "PnL_w val": 4.0, "PnL STD val": 5.0,
+                "Directional Accuracy val": 0.85,
+            },
+        ]
+    )
+    lstm = pd.DataFrame(
+        [
+            {
+                "ticker": "TCS", "type": "MSE", "SR_m scaled val": 0.7,
+                "SR_m scaled test": 0.8, "PnL_m test": 6.0, "MSE": 0.009,
+                "PnL STD": 2.5, "Directional Accuracy": 0.55,
+                "MSE val": 0.009, "PnL_m val": 1.0, "PnL STD val": 2.4,
+                "Directional Accuracy val": 0.52,
+            },
+            {
+                "ticker": "TCS", "type": "STD", "SR_m scaled val": 1.2,
+                "SR_m scaled test": 1.4, "PnL_m test": 4.0, "MSE": 0.006,
+                "PnL STD": 1.8, "Directional Accuracy": 0.60,
+                "MSE val": 0.006, "PnL_m val": 1.5, "PnL STD val": 1.7,
+                "Directional Accuracy val": 0.58,
+            },
+        ]
+    )
+    monkeypatch.setattr("scripts.run_experiment.ROOT", tmp_path)
+
+    result = _research_comparison(gan, lstm)
+
+    assert result["selected_objective"].tolist() == ["PnL MSE", "PnL MSE"]
+    assert result["test_pnl"].tolist() == [12.0, 12.0]
+    assert result["test_scaled_sharpe"].tolist() == [2.5, 2.5]
+    assert result.loc[result["baseline"] == "ForGAN", "baseline_test_pnl"].iloc[0] == pytest.approx(5.0)
+    assert result.loc[result["baseline"] == "LSTM:STD", "baseline_test_pnl"].iloc[0] == pytest.approx(4.0)
+    assert (tmp_path / "results" / "metrics" / "research_comparison.csv").exists()
 
 
 def test_data_validation_rejects_invalid_inputs(tmp_path):
