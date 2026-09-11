@@ -1,9 +1,15 @@
-"""Market/benchmark lookup helpers.
+"""Market and benchmark lookup helpers."""
 
-The implementation is intentionally delegated to ``legacy`` for now so the
-refactor changes module boundaries without changing research behavior.
-"""
+from __future__ import annotations
 
-from tradegan.legacy import ETF_find
+import numpy as np
+import pandas as pd
+
+
+def ETF_find(etflistloc, stock):
+    data = pd.read_csv(etflistloc)
+    out = np.array(data['ticker_y'][data['ticker_x'] == stock])[0]
+    return out
+
 
 __all__ = ["ETF_find"]
