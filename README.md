@@ -2,39 +2,33 @@
 
 A reproduction of the Fin-GAN methodology of Vuletić & Cont (2023), applied to half-day TCS excess returns against the Nifty IT sector index.
 
-## Project structure
+## Repository layout
 
 ```text
-TradeGAN-Profit-Aware-Stock-Forecasting/
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── configs/
-├── data/
-├── src/
-│   ├── tradegan/
-│   │   ├── data/
-│   │   ├── models/
-│   │   ├── objectives/
-│   │   ├── training/
-│   │   ├── evaluation/
-│   │   ├── experiments/
-│   │   └── utils/
-│   ├── TradeGAN.py
-│   ├── app.py
-│   └── data_maker.py
-├── scripts/
-├── tests/
-├── docs/
-├── notebooks/
-└── results/
+├── configs/               experiment configuration
+├── data/                  local/downloaded market data
+├── docs/                  methodology and reproduction notes
+├── experiments/           experiment documentation
+├── results/               archived metrics, figures, checkpoints
+├── scripts/               runnable entry points
+├── src/tradegan/          Python package
+│   ├── data/              data preparation
+│   ├── models/            model components
+│   ├── objectives/        trading-aware objectives
+│   ├── training/          training loops
+│   ├── evaluation/        metrics and backtests
+│   ├── experiments/       experiment orchestration
+│   ├── utils/             shared utilities
+│   └── legacy.py          original monolithic implementation
+├── tests/                 automated tests
+└── stocks-etfs-list.csv   ticker/benchmark metadata
 ```
 
 ## Method
 
 TradeGAN uses a conditional GAN with LSTM generator and discriminator components following the ForGAN architecture. The model forecasts half-day excess log-returns for TCS relative to the Nifty IT benchmark. The generator objective can combine adversarial BCE with MSE, PnL, Sharpe-ratio, and volatility terms.
 
-Trading uses a differentiable `tanh` surrogate for the forecast sign so the economics-aware objectives remain trainable.
+The historical implementation uses a differentiable `tanh` surrogate for trading-sign objectives so the economics-aware terms remain trainable.
 
 ## Attribution
 
@@ -42,16 +36,22 @@ The Fin-GAN methodology, model name, ForGAN-based architecture, and economics-dr
 
 ## Data
 
-`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/`. Keep downloaded market data local rather than committing it.
+`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/`. Downloaded market data is local runtime data and should not be committed.
 
 ## Results
 
-Historical TCS experiment outputs are retained under `results/` as research artifacts and are kept separate from source code.
+Historical experiment outputs are preserved under `results/` and separated from source code. The original PDF write-up is preserved under `docs/TradeGAN.pdf`.
+
+## Running
+
+Install the dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Then download data and run the experiment script from the repository root. The scripts use project-relative paths rather than machine-specific absolute paths.
 
 ## Reproducibility notes
 
-The archived experiment should be interpreted with the limitations documented in the research code: adaptive gradient-norm weighting needs correctness review, directional accuracy was not originally reported as a realized-sign hit rate, the original driver used machine-specific absolute paths, and dependencies/tests were not originally formalized.
-
-## Reference
-
-Vuletić, M. and Cont, R. (2023). *Fin-GAN: Forecasting and Classifying Financial Time Series via Generative Adversarial Networks*.
+The archived research implementation has known limitations, including the adaptive gradient-norm weighting calculation and the absence of a realized directional-accuracy metric. These should be corrected in a separate correctness pass so historical results are not silently changed during structural cleanup.
