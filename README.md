@@ -11,16 +11,6 @@ TradeGAN uses an LSTM-based conditional GAN to forecast **half-day excess log-re
 
 The central idea is to optimize the generator for both forecast quality and trading performance rather than relying only on conventional prediction error.
 
-| Objective term | What it rewards |
-| --- | --- |
-| `MSE` | Forecast accuracy |
-| `PnL` | Profit from trading the predicted sign |
-| `SR` | Sharpe ratio of the trading strategy |
-| `STD` | Lower PnL volatility |
-| `BCE` | Adversarial realism |
-
-Trading-sign objectives use a differentiable `tanh` surrogate so PnL- and Sharpe-based terms can contribute gradients during training.
-
 ## Results
 
 Two result views are preserved: the consolidated objective sweep and a controlled research-comparison run. All reported metrics below are **run-specific observations**, not universal benchmarks.
@@ -67,7 +57,7 @@ The selected objective was **`SR MSE`**.
 | Test MSE vs LSTM:SR | **0.000040** | 0.000040 | **0.55% higher** |
 | PnL STD vs LSTM:SR | **88.4562** | 92.3649 | **4.23% lower** |
 
-### What the results show
+### Interpretation
 
 The experiments support the main motivation of the project: **forecasting accuracy and trading performance are not the same objective**.
 
@@ -75,7 +65,7 @@ In the consolidated sweep, error-focused `MSE` and `BCE` produced negative test 
 
 In the controlled comparison, validation-based selection chose `SR MSE`. On the held-out test region it produced **15.1996 PnL**, **2.7278 scaled Sharpe**, **57.90% directional accuracy**, and a **6.415× PnL multiple versus ForGAN**. Against the selected LSTM `SR` baseline, the same GAN produced **2.572× the PnL** and a higher scaled Sharpe.
 
-The selected GAN's MSE was **8.97% lower than ForGAN** but **0.55% higher than LSTM:SR**, while its PnL standard deviation was lower than both baselines. This illustrates the trade-off between optimizing forecast error and optimizing trading outcomes.
+The selected GAN's MSE was **8.97% lower than ForGAN** but **0.55% higher than LSTM:SR**, while its PnL standard deviation was lower than both baselines. These are single-run observations, not evidence that the strategy generalizes to other assets, periods, or markets.
 
 ### Important interpretation rule
 
@@ -90,7 +80,7 @@ TradeGAN forecasts excess returns rather than raw prices:
 3. Split the observations into training, validation, and test regions.
 4. Train conditional GAN and LSTM models.
 5. Optimize adversarial and economics-aware objectives.
-6. Select the controlled-run GAN objective using validation Sharpe and evaluate on the held-out test region.
+6. Select the controlled-run GAN objective using validation scaled Sharpe and evaluate on the held-out test region.
 7. Report forecasting and trading metrics under the same evaluation convention.
 
 The historical implementation uses a differentiable `tanh` surrogate for sign-based trading objectives so PnL and Sharpe terms can participate in gradient-based optimization.
