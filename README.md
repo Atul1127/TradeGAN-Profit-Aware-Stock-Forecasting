@@ -80,7 +80,7 @@ TradeGAN forecasts excess returns rather than raw prices:
 3. Split the observations into training, validation, and test regions.
 4. Train conditional GAN and LSTM models.
 5. Optimize adversarial and economics-aware objectives.
-6. Select the controlled-run GAN objective using validation scaled Sharpe and evaluate on the held-out test region.
+6. Select the controlled-run GAN objective using validation Sharpe and evaluate on the held-out test region.
 7. Report forecasting and trading metrics under the same evaluation convention.
 
 The historical implementation uses a differentiable `tanh` surrogate for sign-based trading objectives so PnL and Sharpe terms can participate in gradient-based optimization.
