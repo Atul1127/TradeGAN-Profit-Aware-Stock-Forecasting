@@ -88,7 +88,7 @@ def test_objective_formulas_are_correct():
     assert lstm_loss_mse(mse).item() == pytest.approx(0.2)
     assert lstm_loss_pnl(mse, alpha, pnl).item() == pytest.approx(0.0)
     assert lstm_loss_pnl_std(mse, alpha, pnl, delta, std).item() == pytest.approx(2.0)
-    assert lstm_loss_pnl_sr(mse, alpha, pnl, gamma, sr).item() == pytest.approx(-1.0)
+    assert lstm_loss_pnl_sr(mse, alpha, pnl, gamma, sr).item() == pytest.approx(-1.2)
     assert lstm_loss_sr(mse, gamma, sr).item() == pytest.approx(-1.0)
     assert lstm_loss_std(mse, delta, std).item() == pytest.approx(2.2)
 
@@ -225,7 +225,7 @@ def test_data_validation_rejects_invalid_inputs(tmp_path):
 
 def test_checkpoint_round_trip(tmp_path):
     torch.manual_seed(19)
-    model, discriminator = _tiny_gan()
+    model, _discriminator = _tiny_gan()
     optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
     path = tmp_path / "generator.pt"
     _save_checkpoint(path, model, optimizer, "PnL", "TCS")
