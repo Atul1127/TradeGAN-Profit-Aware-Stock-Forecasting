@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from tradegan.data.market import ETF_find
@@ -16,6 +17,8 @@ def split_train_val_test(stock, dataloc, etflistloc, tr=0.8, vl=0.1, h=1, l=10, 
     N_tr = int(tr * N)
     N_vl = int(vl * N)
     N_tst = N - N_tr - N_vl
+    train_sr = excess_returns[0:N_tr]
+    val_sr = excess_returns[N_tr:N_tr + N_vl]
     train_sr = excess_returns[0:N_tr]
     val_sr = excess_returns[N_tr:N_tr + N_vl]
     test_sr = excess_returns[N_tr + N_vl:]
@@ -41,16 +44,23 @@ def split_train_val_test(stock, dataloc, etflistloc, tr=0.8, vl=0.1, h=1, l=10, 
         test_data[i, :] = test_sr[l_tot:l_tot + l + pred]
         l_tot += h
 
+    if plotcheck:
+        plt.figure("Excess returns")
+        plt.plot(dates_dt, excess_returns)
+        plt.title(stock + " excess returns")
+        plt.axvline(x=dates_dt[N_tr], color="red")
+        plt.axvline(x=dates_dt[N_tr + N_vl], color="red")
+        plt.show()
     return train_data, val_data, test_data, dates_dt
 
 
 def split_train_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotcheck=False):
-    returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
-    N = len(returns)
+    excess_returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
+    N = len(excess_returns)
     N_tr = int(tr * N) + int(vl * N)
     N_tst = N - N_tr
-    train_sr = returns[0:N_tr]
-    test_sr = returns[N_tr:]
+    train_sr = excess_returns[0:N_tr]
+    test_sr = excess_returns[N_tr:]
 
     n = int((N_tr - l - pred) / h) + 1
     train_data = np.zeros(shape=(n, l + pred))
@@ -70,14 +80,16 @@ def split_train_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotc
 
 
 def split_train_val_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotcheck=False):
-    returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
-    N = len(returns)
+    excess_returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
+    N = len(excess_returns)
     N_tr = int(tr * N)
     N_vl = int(vl * N)
     N_tst = N - N_tr - N_vl
-    train_sr = returns[0:N_tr]
-    val_sr = returns[N_tr:N_tr + N_vl]
-    test_sr = returns[N_tr + N_vl:]
+    train_sr = excess_returns[0:N_tr]
+    val_sr = excess_returns[N_tr:N_tr + N_vl]
+    train_sr = excess_returns[0:N_tr]
+    val_sr = excess_returns[N_tr:N_tr + N_vl]
+    test_sr = excess_returns[N_tr + N_vl:]
 
     n = int((N_tr - l - pred) / h) + 1
     train_data = np.zeros(shape=(n, l + pred))
@@ -100,6 +112,13 @@ def split_train_val_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, p
         test_data[i, :] = test_sr[l_tot:l_tot + l + pred]
         l_tot += h
 
+    if plotcheck:
+        plt.figure("returns")
+        plt.plot(dates_dt, excess_returns)
+        plt.title(stock + " =returns")
+        plt.axvline(x=dates_dt[N_tr], color="red")
+        plt.axvline(x=dates_dt[N_tr + N_vl], color="red")
+        plt.show()
     return train_data, val_data, test_data, dates_dt
 
 
