@@ -20,9 +20,9 @@ TradeGAN-Profit-Aware-Stock-Forecasting/
 │   │   ├── evaluation/
 │   │   ├── experiments/
 │   │   └── utils/
-│   ├── TradeGAN.py        # legacy monolithic implementation
-│   ├── app.py              # legacy experiment driver
-│   └── data_maker.py       # legacy data downloader
+│   ├── TradeGAN.py
+│   ├── app.py
+│   └── data_maker.py
 ├── scripts/
 ├── tests/
 ├── docs/
@@ -42,23 +42,15 @@ The Fin-GAN methodology, model name, ForGAN-based architecture, and economics-dr
 
 ## Data
 
-`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/` using the data downloader. Downloaded market data is kept locally and should not be committed.
+`stocks-etfs-list.csv` contains ticker-to-benchmark metadata. Historical prices can be downloaded into `data/`. Keep downloaded market data local rather than committing it.
 
 ## Results
 
-The repository contains prior TCS experiment outputs under `results/`. These are retained as research artifacts and are separate from the source code.
+Historical TCS experiment outputs are retained under `results/` as research artifacts and are kept separate from source code.
 
-## Reproducibility
+## Reproducibility notes
 
-The original implementation currently has several research limitations that should be considered when interpreting the archived results:
-
-- the adaptive gradient-norm weighting implementation needs correctness review;
-- directional accuracy is not reported as a realized-sign hit rate;
-- the original experiment driver used machine-specific absolute paths;
-- dependency versions were not originally pinned;
-- tests and continuous integration were not part of the original implementation.
-
-These issues are tracked separately from the structural cleanup so that refactoring does not silently change the historical experiment.
+The archived experiment should be interpreted with the limitations documented in the research code: adaptive gradient-norm weighting needs correctness review, directional accuracy was not originally reported as a realized-sign hit rate, the original driver used machine-specific absolute paths, and dependencies/tests were not originally formalized.
 
 ## Reference
 
