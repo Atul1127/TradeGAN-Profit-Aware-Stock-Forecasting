@@ -34,6 +34,14 @@ from tradegan.objectives.losses import (
 )
 from tradegan.training.gan import TrainLoopForGAN, TrainLoopMainPnLnv
 from tradegan.training.lstm import TrainLoopnLSTMPnL
+from tradegan.utils.trading_metrics import (
+    directional_accuracy,
+    fold_change,
+    getPnL,
+    getSR,
+    percent_reduction,
+    pnl_std,
+)
 
 
 def _tiny_gan(batch: int = 8, lookback: int = 4, z_dim: int = 3, hidden: int = 4):
@@ -198,6 +206,7 @@ def test_evaluation_runs_with_small_mc_sample_count():
     assert len(gan_result) == 1
     assert len(gan_pnl) == 6
     assert np.isfinite(gan_result.select_dtypes(include=[np.number]).to_numpy()).all()
+    assert {"Directional Accuracy", "PnL STD", "Directional Accuracy val", "PnL STD val"}.issubset(gan_result.columns)
 
     lstm_result, lstm_pnl, *_ = Evaluation2LSTM(
         "TCS", 2, lstm, test, val, 1, 4, 1, 4, 4, 0,
@@ -206,6 +215,29 @@ def test_evaluation_runs_with_small_mc_sample_count():
     assert len(lstm_result) == 1
     assert len(lstm_pnl) == 6
     assert np.isfinite(lstm_result.select_dtypes(include=[np.number]).to_numpy()).all()
+    assert {"Directional Accuracy", "PnL STD", "Directional Accuracy val", "PnL STD val"}.issubset(lstm_result.columns)
+
+
+def test_research_metric_helpers():
+    predicted = torch.tensor([1.0, -1.0, 2.0, -2.0])
+    real = torch.tensor([0.5, -0.5, -0.5, 0.5])
+    assert directional_accuracy(predicted, real).item() == pytest.approx(0.5)
+
+    pnl = torch.tensor([1.0, 3.0, 5.0, 7.0])
+    assert pnl_std(pnl).item() == pytest.approx(float(torch.std(pnl).item()))
+    assert percent_reduction(4.0, 10.0) == pytest.approx(60.0)
+    assert fold_change(28.8, 10.0) == pytest.approx(2.88)
+    assert getPnL(predicted, real, 4).item() == pytest.approx(5000.0)
+    assert torch.isfinite(getSR(predicted, real))
+
+    with pytest.raises(ValueError):
+        directional_accuracy(torch.tensor([]), torch.tensor([]))
+    with pytest.raises(ValueError):
+        pnl_std(torch.tensor([1.0]))
+    with pytest.raises(ValueError):
+        percent_reduction(1.0, 0.0)
+    with pytest.raises(ValueError):
+        fold_change(1.0, 0.0)
 
 
 def test_data_validation_rejects_invalid_inputs(tmp_path):
