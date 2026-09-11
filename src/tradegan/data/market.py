@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 
 def ETF_find(etflistloc, stock):
     data = pd.read_csv(etflistloc)
-    out = np.array(data['ticker_y'][data['ticker_x'] == stock])[0]
-    return out
+    matches = data.loc[data["ticker_x"] == stock, "ticker_y"]
+    if matches.empty:
+        raise KeyError(f"No ETF mapping found for ticker {stock!r}")
+    return matches.iloc[0]
 
 
 __all__ = ["ETF_find"]
