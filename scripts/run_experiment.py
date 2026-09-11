@@ -9,6 +9,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tradegan import legacy
+from tradegan.lstm_model import LSTMForecaster
 from tradegan.fixed_experiment import run_gan_experiment, run_lstm_experiment
 
 
@@ -35,6 +37,14 @@ def main() -> None:
         batch_size=args.batch_size,
         use_gpu=not args.cpu,
     )
+
+    # The archived GradientCheckLSTM/Evaluation2LSTM routines require the
+    # model's recurrent hidden-state width to match the supplied hid_g. The
+    # archived LSTM violated that contract by hard-coding hidden_size=output_dim.
+    # Patch only the fixed experiment process; the archived source remains
+    # untouched for provenance.
+    legacy.LSTM = LSTMForecaster
+
     run_lstm_experiment(
         ticker=args.ticker,
         root=ROOT,
