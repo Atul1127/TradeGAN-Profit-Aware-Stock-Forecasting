@@ -16,6 +16,7 @@ env/
 .ipynb_checkpoints/
 
 # Local market data
+/data/*.csv
 /data/raw/
 /data/processed/
 
