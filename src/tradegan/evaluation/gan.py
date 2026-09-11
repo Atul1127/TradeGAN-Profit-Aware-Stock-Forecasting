@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from ..utils.trading_metrics import directional_accuracy, pnl_std
+
 
 def _paired_pnl(pnl: torch.Tensor) -> torch.Tensor:
     usable = 2 * (pnl.numel() // 2)
@@ -81,11 +83,7 @@ def Evaluation2(
     plot=False,
     mc_samples=1000,
 ):
-    """Evaluate one GAN on test and validation data.
-
-    The legacy arguments are retained for API compatibility; evaluation uses
-    the model, data tensors and explicit Monte-Carlo sample count only.
-    """
+    """Evaluate one GAN on test and validation data."""
     del freq, h, pred, sr_val, plotsloc, f_name, plot
     if mc_samples <= 0:
         raise ValueError("mc_samples must be positive")
@@ -117,10 +115,14 @@ def Evaluation2(
         "MAE": float(test["mae"].item()),
         "PnL_w": float(test["paired_pnl"].mean().item()),
         "SR_w scaled": float((test["sharpe"] * scale).item()),
+        "PnL STD": float(pnl_std(test["paired_pnl"]).item()),
+        "Directional Accuracy": float(directional_accuracy(test_mean, test_real).item()),
         "RMSE val": float(val["rmse"].item()),
         "MAE val": float(val["mae"].item()),
         "PnL_w val": float(val["paired_pnl"].mean().item()),
         "SR_w scaled val": float((val["sharpe"] * scale).item()),
+        "PnL STD val": float(pnl_std(val["paired_pnl"]).item()),
+        "Directional Accuracy val": float(directional_accuracy(val_mean, val_real).item()),
         "Corr": _safe_corr(test_mean, test_real),
         "Corr val": _safe_corr(val_mean, val_real),
         "Pos mn": float((test_mean > 0).float().mean()),
