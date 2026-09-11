@@ -134,8 +134,9 @@ def _train_gan(
                 parameter.requires_grad_(False)
             try:
                 fake_pred = disc(fake_pair, h0d, c0d)
+                bce = criterion(fake_pred, torch.ones_like(fake_pred))
                 gen_loss = objective(
-                    fake_pred,
+                    bce,
                     fake,
                     real,
                     float(alpha),
@@ -280,7 +281,7 @@ def TrainLoopMainSRnv(*args, **kwargs):
     return _run(_objective_sr, *args, **kwargs)
 
 
-def TrainLoopMainSRMSEnv(*args, **kwargs):
+def TrainLoopMainSRMSEenv(*args, **kwargs):
     return _run(_objective_sr_mse, *args, **kwargs)
 
 
