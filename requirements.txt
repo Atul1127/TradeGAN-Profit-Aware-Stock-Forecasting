@@ -1,8 +1,8 @@
-pandas
 numpy
+pandas
 tqdm
 torch
 matplotlib
-seaborn
 scikit-learn
 yfinance
+pytest
