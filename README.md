@@ -23,7 +23,7 @@ Trading-sign objectives use a differentiable `tanh` surrogate so PnL- and Sharpe
 
 ## Results
 
-One completed TCS run evaluated multiple GAN objectives on the same held-out test region. The consolidated experiment metrics are preserved under `results/metrics/`.
+Two result views are preserved: the consolidated objective sweep and a controlled research-comparison run. All reported metrics below are **run-specific observations**, not universal benchmarks.
 
 ### GAN objective comparison
 
@@ -48,23 +48,38 @@ The strongest observed LSTM configuration in the consolidated results was:
 | --- | ---: | ---: | ---: | ---: |
 | **`STD`** | **12.31** | **2.36** | **0.00633** | **0.00452** |
 
+### Controlled research comparison
+
+A controlled TCS run used **100 GAN epochs, 500 LSTM epochs, 25 gradient-calibration iterations, seed 42, and CPU execution**. The GAN objective was selected using **validation scaled Sharpe only**, then evaluated on the held-out test set.
+
+The selected objective was **`SR MSE`**.
+
+| Comparison | TradeGAN / selected GAN | Baseline | Relative result |
+| --- | ---: | ---: | ---: |
+| Test PnL vs ForGAN | **15.1996** | 2.3692 | **6.415× PnL** |
+| Test scaled Sharpe vs ForGAN | **2.7278** | 0.4128 | 6.61× baseline Sharpe |
+| Directional accuracy vs ForGAN | **57.90%** | 50.17% | +7.73 pp |
+| Test MSE vs ForGAN | **0.000040** | 0.000044 | **8.97% lower** |
+| PnL STD vs ForGAN | **88.4562** | 91.1123 | **2.92% lower** |
+| Test PnL vs LSTM:SR | **15.1996** | 5.9086 | **2.572× PnL** |
+| Test scaled Sharpe vs LSTM:SR | **2.7278** | 1.0155 | 2.69× baseline Sharpe |
+| Directional accuracy vs LSTM:SR | **57.90%** | 51.37% | +6.54 pp |
+| Test MSE vs LSTM:SR | **0.000040** | 0.000040 | **0.55% higher** |
+| PnL STD vs LSTM:SR | **88.4562** | 92.3649 | **4.23% lower** |
+
 ### What the results show
 
-The experiment demonstrates the intended trade-off between **forecasting accuracy and trading performance**.
+The experiments support the main motivation of the project: **forecasting accuracy and trading performance are not the same objective**.
 
-The error-focused `MSE` and `BCE` objectives produced negative test PnL and negative Sharpe in this run. Adding trading-oriented terms produced positive trading results, with `SR MSE` reaching the strongest observed GAN Sharpe (**2.00**) and PnL (**9.86**) among the consolidated GAN rows.
+In the consolidated sweep, error-focused `MSE` and `BCE` produced negative test PnL and negative Sharpe, while several economics-aware objectives produced positive trading results. `SR MSE` gave the strongest consolidated GAN Sharpe (**2.00**) and PnL (**9.86**) in that run.
 
-At the same time, the `SR MSE` model has substantially worse forecasting error than the best error-oriented configurations. The `PnL MSE` / `PnL MSE STD` family provides a stronger compromise between forecast error and trading performance, while the LSTM `STD` baseline achieved the lowest RMSE/MAE and the highest Sharpe among the specific configurations reported here.
+In the controlled comparison, validation-based selection chose `SR MSE`. On the held-out test region it produced **15.1996 PnL**, **2.7278 scaled Sharpe**, **57.90% directional accuracy**, and a **6.415× PnL multiple versus ForGAN**. Against the selected LSTM `SR` baseline, the same GAN produced **2.572× the PnL** and a higher scaled Sharpe.
 
-**The key point:** a model that forecasts best is not necessarily the model that trades best. The objective function materially changes that trade-off.
+The selected GAN's MSE was **8.97% lower than ForGAN** but **0.55% higher than LSTM:SR**, while its PnL standard deviation was lower than both baselines. This illustrates the trade-off between optimizing forecast error and optimizing trading outcomes.
 
-### Experimental caveat
+### Important interpretation rule
 
-These are **run-specific observations**, not universal benchmarks. They depend on the data snapshot, train/validation/test split, random seed, model configuration, training duration, and evaluation convention.
-
-A later research-comparison run also produced exploratory metrics such as **15.1996 test PnL**, **6.4154 scaled Sharpe**, and reported PnL fold changes versus baseline models. Because the generated comparison output contained inconsistent metric alignment across rows, those numbers are **not presented as validated benchmark claims** here.
-
-The repository also does **not** claim a `3.18` Sharpe ratio, `85%` directional accuracy, or `2.88×` PnL improvement as verified results.
+The **6.415× figure is PnL fold change, not Sharpe**. The corresponding selected GAN test scaled Sharpe is **2.7278**. Directional accuracy is **57.90%**; the value `88.4562` is PnL standard deviation, not directional accuracy.
 
 ## Method
 
@@ -75,7 +90,8 @@ TradeGAN forecasts excess returns rather than raw prices:
 3. Split the observations into training, validation, and test regions.
 4. Train conditional GAN and LSTM models.
 5. Optimize adversarial and economics-aware objectives.
-6. Evaluate forecasting and trading metrics on held-out data.
+6. Select the controlled-run GAN objective using validation Sharpe and evaluate on the held-out test region.
+7. Report forecasting and trading metrics under the same evaluation convention.
 
 The historical implementation uses a differentiable `tanh` surrogate for sign-based trading objectives so PnL and Sharpe terms can participate in gradient-based optimization.
 
@@ -83,9 +99,9 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
 
 1. Results come from a limited experimental setting and should not be interpreted as statistical evidence of generalization.
 2. Different objectives optimize different goals, so “best” depends on the metric being evaluated.
-3. Trading metrics and forecasting metrics must be compared under the same test window and conventions.
-4. Directional accuracy is not used as a headline result in the consolidated experiment table.
-5. The exploratory research-comparison output requires further validation before its metrics should be used as benchmark claims.
+3. Comparisons must use the same test window, trading convention, and scaling convention.
+4. The controlled comparison uses one seed and one asset/benchmark pair; multi-seed and multi-asset validation is still needed.
+5. Sharpe is reported using this repository's paired-PnL and scaling convention and should not be compared directly with results using different conventions.
 
 ## Repository layout
 
@@ -129,7 +145,7 @@ Python **3.10+** is supported.
 python -m pip install -r requirements.txt
 ```
 
-Or install the package in editable mode:
+Or:
 
 ```bash
 python -m pip install -e .
@@ -155,13 +171,13 @@ Market data is treated as local runtime data rather than a committed repository 
 python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --gradient-epochs 1 --cpu
 ```
 
-### Full experiment
+### Controlled research experiment
 
 ```bash
-python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 100 --cpu
+python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 25 --seed 42 --cpu
 ```
 
-The documented consolidated results were obtained from a completed TCS run using **100 GAN epochs, 500 LSTM epochs, and 10 gradient-calibration epochs**.
+This run selects the GAN objective from validation scaled Sharpe and writes `results/metrics/research_comparison.csv`.
 
 ## Tests
 
@@ -171,7 +187,7 @@ Run:
 pytest -q
 ```
 
-The expanded local test suite contains **14 tests** covering objectives, model behavior, training updates, evaluation, validation, metrics, and checkpoint round-trips.
+The expanded local test suite currently contains **16 tests** covering objective formulas, model behavior, training updates, evaluation, data validation, research metrics, comparison alignment, and checkpoint round-trips.
 
 ## Outputs
 
