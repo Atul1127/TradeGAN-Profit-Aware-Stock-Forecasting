@@ -46,7 +46,7 @@ def _evaluate(model, data, lookback, hidden_dim, latent_dim, device, mc_samples)
     signed_pnl = 10000 * torch.sign(mean_prediction) * real
     paired = _paired_pnl(signed_pnl)
     sharpe = paired.mean() / paired.std().clamp_min(torch.finfo(paired.dtype).eps)
-    rmse = torch.sqrt(torch.mean((mean_prediction - real) ** 2))
+    mse = torch.mean((mean_prediction - real) ** 2)
     mae = torch.mean(torch.abs(mean_prediction - real))
     return {
         "mean": mean_prediction,
@@ -54,7 +54,8 @@ def _evaluate(model, data, lookback, hidden_dim, latent_dim, device, mc_samples)
         "real": real,
         "pnl": signed_pnl,
         "paired_pnl": paired,
-        "rmse": rmse,
+        "mse": mse,
+        "rmse": torch.sqrt(mse),
         "mae": mae,
         "sharpe": sharpe,
     }
@@ -111,12 +112,14 @@ def Evaluation2(
         "ticker": ticker,
         "hid_g": hid_g,
         "hid_d": hid_d,
+        "MSE": float(test["mse"].item()),
         "RMSE": float(test["rmse"].item()),
         "MAE": float(test["mae"].item()),
         "PnL_w": float(test["paired_pnl"].mean().item()),
         "SR_w scaled": float((test["sharpe"] * scale).item()),
         "PnL STD": float(pnl_std(test["paired_pnl"]).item()),
         "Directional Accuracy": float(directional_accuracy(test_mean, test_real).item()),
+        "MSE val": float(val["mse"].item()),
         "RMSE val": float(val["rmse"].item()),
         "MAE val": float(val["mae"].item()),
         "PnL_w val": float(val["paired_pnl"].mean().item()),
