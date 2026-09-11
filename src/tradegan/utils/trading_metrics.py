@@ -1,5 +1,21 @@
-"""Trading metrics shared by GAN and LSTM experiments."""
+"""Trading metrics extracted from the original TradeGAN implementation."""
 
-from tradegan.legacy import getPnL, getSR, combine_vectors
+from __future__ import annotations
 
-__all__ = ["getPnL", "getSR", "combine_vectors"]
+import torch
+
+
+def getPnL(predicted, real, nsamp):
+    sgn_fake = torch.sign(predicted)
+    PnL = torch.sum(sgn_fake * real)
+    PnL = 10000 * PnL / nsamp
+    return PnL
+
+
+def getSR(predicted, real):
+    sgn_fake = torch.sign(predicted)
+    SR = torch.mean(sgn_fake * real) / torch.std(sgn_fake * real)
+    return SR
+
+
+__all__ = ["getPnL", "getSR"]
