@@ -25,11 +25,11 @@ training:
   generator_lr: 0.0001
   discriminator_lr: 0.0001
   discriminator_steps: 1
-  gradient_samples: 100
+  gradient_samples: 25
   checkpoint_every: 20
 
 experiment:
   seed: 42
   device: auto
   save_plots: true
-  output_dir: artifacts
+  output_dir: results
