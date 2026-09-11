@@ -281,7 +281,7 @@ def TrainLoopMainSRnv(*args, **kwargs):
     return _run(_objective_sr, *args, **kwargs)
 
 
-def TrainLoopMainSRMSEenv(*args, **kwargs):
+def TrainLoopMainSRMSEnv(*args, **kwargs):
     return _run(_objective_sr_mse, *args, **kwargs)
 
 
