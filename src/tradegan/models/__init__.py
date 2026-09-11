@@ -1,0 +1,1 @@
+"""TradeGAN neural network architectures."""
