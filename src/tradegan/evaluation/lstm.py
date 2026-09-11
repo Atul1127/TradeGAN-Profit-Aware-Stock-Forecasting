@@ -37,7 +37,8 @@ def _evaluate(model, data, lookback, hidden_dim, device):
     pnl = 10000 * torch.sign(prediction) * real
     paired = _paired_pnl(pnl)
     sharpe = paired.mean() / paired.std().clamp_min(torch.finfo(paired.dtype).eps)
-    return prediction, real, pnl, paired, sharpe
+    mse = torch.mean((prediction - real) ** 2)
+    return prediction, real, pnl, paired, sharpe, mse
 
 
 def Evaluation2LSTM(
@@ -65,10 +66,10 @@ def Evaluation2LSTM(
     """Evaluate deterministic LSTM forecasts on test and validation data."""
     del freq, h, pred, hid_d, z_dim, sr_val, plotsloc, f_name, plot
 
-    test_pred, test_real, test_pnl, test_pair, test_sr = _evaluate(
+    test_pred, test_real, test_pnl, test_pair, test_sr, test_mse = _evaluate(
         gen, test_data, l, hid_g, device
     )
-    val_pred, val_real, val_pnl, val_pair, val_sr = _evaluate(
+    val_pred, val_real, val_pnl, val_pair, val_sr, val_mse = _evaluate(
         gen, val_data, l, hid_g, device
     )
 
@@ -79,13 +80,15 @@ def Evaluation2LSTM(
         "type": losstype,
         "epochs": n_epochs,
         "ticker": ticker,
-        "RMSE": float(torch.sqrt(torch.mean((test_pred - test_real) ** 2)).item()),
+        "MSE": float(test_mse.item()),
+        "RMSE": float(torch.sqrt(test_mse).item()),
         "MAE": float(torch.mean(torch.abs(test_pred - test_real)).item()),
         "PnL_m test": float(test_pair.mean().item()),
         "SR_m scaled test": float((test_sr * scale).item()),
         "PnL STD": float(pnl_std(test_pair).item()),
         "Directional Accuracy": float(directional_accuracy(test_pred, test_real).item()),
-        "RMSE val": float(torch.sqrt(torch.mean((val_pred - val_real) ** 2)).item()),
+        "MSE val": float(val_mse.item()),
+        "RMSE val": float(torch.sqrt(val_mse).item()),
         "MAE val": float(torch.mean(torch.abs(val_pred - val_real)).item()),
         "PnL_m val": float(val_pair.mean().item()),
         "SR_m scaled val": float((val_sr * scale).item()),
