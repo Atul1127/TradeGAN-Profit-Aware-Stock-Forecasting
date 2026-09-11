@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from ..utils.trading_metrics import directional_accuracy, pnl_std
+
 
 def _paired_pnl(pnl: torch.Tensor) -> torch.Tensor:
     usable = 2 * (pnl.numel() // 2)
@@ -81,10 +83,14 @@ def Evaluation2LSTM(
         "MAE": float(torch.mean(torch.abs(test_pred - test_real)).item()),
         "PnL_m test": float(test_pair.mean().item()),
         "SR_m scaled test": float((test_sr * scale).item()),
+        "PnL STD": float(pnl_std(test_pair).item()),
+        "Directional Accuracy": float(directional_accuracy(test_pred, test_real).item()),
         "RMSE val": float(torch.sqrt(torch.mean((val_pred - val_real) ** 2)).item()),
         "MAE val": float(torch.mean(torch.abs(val_pred - val_real)).item()),
         "PnL_m val": float(val_pair.mean().item()),
         "SR_m scaled val": float((val_sr * scale).item()),
+        "PnL STD val": float(pnl_std(val_pair).item()),
+        "Directional Accuracy val": float(directional_accuracy(val_pred, val_real).item()),
         "Corr": _safe_corr(test_pred, test_real),
         "Corr val": _safe_corr(val_pred, val_real),
         "Pos mn": float((test_pred > 0).float().mean()),
