@@ -1,67 +1,62 @@
+"""Download stock and benchmark OHLC data into the local data directory."""
+
+from pathlib import Path
+import argparse
+
 import pandas as pd
-import os
 import yfinance as yf
 
-def fetch_data_for_both(input_csv, output_folder="data",
-                        start_date="2010-01-01", end_date="2021-12-31",
-                        exchange_suffix=".NS"):
-    try:
-        master_df = pd.read_csv(input_csv)
-        print(f"Successfully read {input_csv}")
-    except FileNotFoundError:
-        print(f"Input CSV file '{input_csv}' not found.")
-        return
-    except Exception as e:
-        print(f"Error reading {input_csv}: {e}")
-        return
-    os.makedirs(output_folder, exist_ok=True)
-    print(f"Output folder '{output_folder}' is ready.")
-    for idx, row in master_df.iterrows():
-
-        ticker_x = row['ticker_x']
-        ticker_y = row['ticker_y']
-
-        yf_ticker_x = ticker_x + exchange_suffix
-
-        print(f"\nFetching data for X={yf_ticker_x} and Y={ticker_y}...")
-
-        for current_ticker in [yf_ticker_x, ticker_y]:
-            try:
-
-                df_yf = yf.download(current_ticker, start=start_date, end=end_date, progress=False)
-
-                if df_yf.empty:
-                    print(f"No data for {current_ticker}. Skipping...")
-                    continue
-
-                df_yf = df_yf[['Open', 'Close']].copy()
-                df_yf.rename(columns={'Open': 'AdjOpen', 'Close': 'AdjClose'}, inplace=True)
-
-                df_yf.reset_index(inplace=True)
-                if 'Date' in df_yf.columns:
-                    df_yf.rename(columns={'Date': 'date'}, inplace=True)
-
-                if current_ticker.endswith(exchange_suffix):
-                    base_ticker = current_ticker[:-len(exchange_suffix)]
-                else:
-                    base_ticker = current_ticker
-
-                out_path = os.path.join(output_folder, f"{base_ticker}.csv")
+ROOT = Path(__file__).resolve().parents[1]
 
 
-                df_yf.to_csv(out_path, index=False)
-                print(f"Saved {out_path}")
+def download_data(
+    metadata_file: Path,
+    output_dir: Path,
+    start_date: str = "2010-01-01",
+    end_date: str = "2021-12-31",
+    exchange_suffix: str = ".NS",
+) -> None:
+    metadata = pd.read_csv(metadata_file)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-            except Exception as e:
-                print(f"Error fetching data for {current_ticker}: {e}")
+    required_columns = {"ticker_x", "ticker_y"}
+    missing = required_columns - set(metadata.columns)
+    if missing:
+        raise ValueError(f"Metadata file is missing columns: {sorted(missing)}")
 
-    print("\nAll possible tickers processed.")
+    for _, row in metadata.iterrows():
+        stock = str(row["ticker_x"])
+        benchmark = str(row["ticker_y"])
+        tickers = (stock + exchange_suffix, benchmark)
+
+        for ticker in tickers:
+            data = yf.download(
+                ticker,
+                start=start_date,
+                end=end_date,
+                progress=False,
+                auto_adjust=False,
+            )
+            if data.empty:
+                print(f"No data returned for {ticker}; skipping.")
+                continue
+
+            data = data[["Open", "Close"]].copy()
+            data.columns = ["AdjOpen", "AdjClose"]
+            data.reset_index(inplace=True)
+            data.rename(columns={"Date": "date"}, inplace=True)
+
+            base_ticker = ticker[:-len(exchange_suffix)] if ticker.endswith(exchange_suffix) else ticker
+            output_file = output_dir / f"{base_ticker}.csv"
+            data.to_csv(output_file, index=False)
+            print(f"Saved {output_file}")
+
 
 if __name__ == "__main__":
-    fetch_data_for_both(
-        input_csv="stocks-etfs-list.csv",
-        output_folder="data",
-        start_date="2010-01-01",
-        end_date="2021-12-31",
-        exchange_suffix=".NS"
-    )
+    parser = argparse.ArgumentParser(description="Download TradeGAN market data.")
+    parser.add_argument("--metadata", type=Path, default=ROOT / "stocks-etfs-list.csv")
+    parser.add_argument("--output", type=Path, default=ROOT / "data")
+    parser.add_argument("--start", default="2010-01-01")
+    parser.add_argument("--end", default="2021-12-31")
+    args = parser.parse_args()
+    download_data(args.metadata, args.output, args.start, args.end)
