@@ -86,7 +86,7 @@ def Evaluation2(
     The legacy arguments are retained for API compatibility; evaluation uses
     the model, data tensors and explicit Monte-Carlo sample count only.
     """
-    del freq, hid_d, h, pred, sr_val, plotsloc, f_name, plot
+    del freq, h, pred, sr_val, plotsloc, f_name, plot
     if mc_samples <= 0:
         raise ValueError("mc_samples must be positive")
     if l <= 0 or hid_g <= 0 or z_dim <= 0:
