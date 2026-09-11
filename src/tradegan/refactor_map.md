@@ -1,27 +1,32 @@
-# Legacy Refactor Map
+# TradeGAN Refactor Map
 
-`legacy.py` remains the frozen behavioral reference during migration. Extracted modules now contain the first set of real implementations, with regression tests comparing them directly to `legacy.py`.
+The former monolithic implementation has been split into focused modules. `legacy.py` is now a compatibility import shim only.
 
-| Legacy responsibility | Extracted module | Status |
+| Responsibility | Module | Status |
 | --- | --- | --- |
-| `ETF_find` | `data/market.py` | extracted + tested |
-| `excessreturns`, `excessreturns_closeonly`, `rawreturns` | `data/returns.py` | extracted + tested |
-| `split_train_val_test`, `split_train_testraw`, `split_train_val_testraw` | `data/splits.py` | extracted + tested |
-| `Generator`, `Discriminator` | `models/gan.py` | extracted + tested |
-| `LSTM` (legacy architecture) | `models/lstm.py` | extracted + tested |
-| `combine_vectors` | `utils/tensors.py` | extracted + tested |
-| `getPnL`, `getSR` | `utils/trading_metrics.py` | extracted + tested |
-| `Evaluation2`, `Evaluation3` | `evaluation/gan.py` | boundary prepared; legacy implementation retained |
-| `Evaluation2LSTM` | `evaluation/lstm.py` | boundary prepared; legacy implementation retained |
-| `GradientCheck`, `GradientCheckLSTM` | `objectives/gradient_analysis.py` | boundary prepared; legacy implementation retained |
-| GAN training loops | `training/gan.py` | boundary prepared; legacy implementation retained |
-| LSTM training loops | `training/lstm.py` | boundary prepared; legacy implementation retained |
-| `FinGAN_combos` | `experiments/gan.py` | boundary prepared; legacy implementation retained |
-| `LSTM_combos` | `experiments/lstm.py` | boundary prepared; legacy implementation retained |
-| Explicit objective formulas | `objectives/losses.py` | isolated; not yet wired into training |
+| Market/ETF lookup | `data/market.py` | complete |
+| Return construction | `data/returns.py` | complete |
+| Train/validation/test windows | `data/splits.py` | complete |
+| GAN models | `models/gan.py` | complete |
+| LSTM model | `models/lstm.py` | legacy-compatible |
+| Corrected LSTM forecaster | `lstm_model.py` | runnable path |
+| Trading metrics | `utils/trading_metrics.py` | complete |
+| Tensor helpers | `utils/tensors.py` | complete |
+| Objective formulas | `objectives/losses.py` | complete |
+| Gradient calibration | `objectives/losses.py` | complete |
+| GAN training | `training/gan.py` | complete |
+| LSTM training | `training/lstm.py` | complete |
+| GAN evaluation | `evaluation/gan.py` | complete |
+| LSTM evaluation | `evaluation/lstm.py` | complete |
+| GAN experiment entry point | `experiments/gan.py` | complete |
+| LSTM experiment entry point | `experiments/lstm.py` | complete |
+| Main runnable orchestration | `fixed_experiment.py` | complete |
+| Backward-compatible API | `legacy.py` | shim only |
 
-## Migration rule
+## Compatibility
 
-The first extraction stage copies the original implementations into focused modules and adds direct regression tests against the frozen monolith. The legacy file is deliberately left untouched until each subsystem has passed equivalence checks. This avoids turning a refactor into an algorithm change.
+Existing imports such as `from tradegan import legacy` remain valid because `legacy.py` re-exports the focused implementations. New code should import from the specific module it uses.
 
-The corrected `fixed_experiment.py` remains the runnable path. The legacy implementations continue to serve as the reference for subsequent extraction of evaluation, gradient analysis, training loops, and orchestration.
+## Validation
+
+Regression tests remain in `tests/test_extracted_equivalence.py`. Full local execution should be run from the project's Windows environment with `pytest -q` followed by a one-epoch smoke run before any long experiment.
