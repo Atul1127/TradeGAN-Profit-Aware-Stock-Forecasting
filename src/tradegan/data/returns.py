@@ -2,71 +2,88 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+
+
+def _load_price_frame(dataloc, ticker: str) -> pd.DataFrame:
+    path = Path(dataloc) / f"{ticker}.csv"
+    try:
+        frame = pd.read_csv(path, parse_dates=["date"])
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"Price file '{path}' not found.") from exc
+
+    required = {"date", "AdjOpen", "AdjClose"}
+    missing = required - set(frame.columns)
+    if missing:
+        raise ValueError(f"Price file '{path}' is missing columns: {sorted(missing)}")
+
+    frame = frame.sort_values("date").drop_duplicates("date", keep="last").reset_index(drop=True)
+    frame = frame.dropna(subset=["date", "AdjOpen", "AdjClose"])
+    if (frame[["AdjOpen", "AdjClose"]] <= 0).any().any():
+        raise ValueError(f"Price file '{path}' contains non-positive prices.")
+    return frame
 
 
 def excessreturns_closeonly(dataloc, stock, etf, plotcheck=False):
-    s_df = pd.read_csv(dataloc + stock + ".csv")
-    e_df = pd.read_csv(dataloc + etf + ".csv")
-    dates_dt = pd.to_datetime(s_df['date'])
-    d1 = pd.to_datetime("2022-01-01")
-    smp = dates_dt < d1
-    s_df = s_df[smp]
-    e_df = e_df[smp]
-    s_log = np.log(s_df['AdjClose'])
-    e_log = np.log(e_df['AdjClose'])
-    dates_dt = dates_dt[smp]
-    s_ret = np.diff(s_log)
-    e_ret = np.diff(e_log)
+    s_df = _load_price_frame(dataloc, stock)
+    e_df = _load_price_frame(dataloc, etf)
+    cutoff_date = pd.Timestamp("2022-01-01")
+
+    merged_df = pd.merge(
+        s_df[s_df["date"] < cutoff_date],
+        e_df[e_df["date"] < cutoff_date],
+        on="date",
+        suffixes=("_stock", "_etf"),
+    )
+    if len(merged_df) < 2:
+        raise ValueError(f"Not enough overlapping observations for '{stock}' and '{etf}'.")
+
+    s_ret = np.diff(np.log(merged_df["AdjClose_stock"].to_numpy()))
+    e_ret = np.diff(np.log(merged_df["AdjClose_etf"].to_numpy()))
     excessret = s_ret - e_ret
+    dates_dt = merged_df["date"].iloc[1:].reset_index(drop=True)
 
     if plotcheck:
-        plt.figure(stock + " price")
-        plt.title(stock + " price")
-        plt.plot(dates_dt, s_df['AdjClose'])
+        plt.figure(f"{stock} price")
+        plt.title(f"{stock} price")
+        plt.plot(merged_df["date"], merged_df["AdjClose_stock"])
         plt.xlabel("date")
         plt.ylabel("price in USD")
         plt.show()
-        plt.figure("Returns " + stock)
-        plt.title("Returns " + stock)
-        plt.plot(dates_dt[1:], s_ret, alpha=0.7, label='stock')
-        plt.plot(dates_dt[1:], e_ret, alpha=0.7, label='etf')
-        plt.plot(dates_dt[1:], excessret, alpha=0.7, label='excess return')
+        plt.figure(f"Returns {stock}")
+        plt.title(f"Returns {stock}")
+        plt.plot(dates_dt, s_ret, alpha=0.7, label="stock")
+        plt.plot(dates_dt, e_ret, alpha=0.7, label="etf")
+        plt.plot(dates_dt, excessret, alpha=0.7, label="excess return")
         plt.xlabel("date")
         plt.legend()
         plt.show()
-    return excessret, dates_dt[1:]
+    return excessret, dates_dt
 
 
 def excessreturns(dataloc, stock, etf, plotcheck=False):
     cutoff_date = pd.Timestamp("2022-01-01")
-
-    try:
-        s_df = pd.read_csv(f"{dataloc}{stock}.csv", parse_dates=['date'])
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Stock file '{dataloc}{stock}.csv' not found.")
-
-    try:
-        e_df = pd.read_csv(f"{dataloc}{etf}.csv", parse_dates=['date'])
-    except FileNotFoundError:
-        raise FileNotFoundError(f"ETF file '{dataloc}{etf}.csv' not found.")
+    s_df = _load_price_frame(dataloc, stock)
+    e_df = _load_price_frame(dataloc, etf)
 
     merged_df = pd.merge(
-        s_df[s_df['date'] < cutoff_date],
-        e_df[e_df['date'] < cutoff_date],
-        on='date',
-        suffixes=('_stock', '_etf')
-    ).reset_index(drop=True)
+        s_df[s_df["date"] < cutoff_date],
+        e_df[e_df["date"] < cutoff_date],
+        on="date",
+        suffixes=("_stock", "_etf"),
+    )
 
     if merged_df.empty:
         raise ValueError(f"No overlapping dates found for stock '{stock}' and ETF '{etf}' before {cutoff_date}.")
 
-    s_logclose = np.log(merged_df['AdjClose_stock'].values)
-    e_logclose = np.log(merged_df['AdjClose_etf'].values)
-    s_logopen = np.log(merged_df['AdjOpen_stock'].values)
-    e_logopen = np.log(merged_df['AdjOpen_etf'].values)
+    s_logclose = np.log(merged_df["AdjClose_stock"].to_numpy())
+    e_logclose = np.log(merged_df["AdjClose_etf"].to_numpy())
+    s_logopen = np.log(merged_df["AdjOpen_stock"].to_numpy())
+    e_logopen = np.log(merged_df["AdjOpen_etf"].to_numpy())
 
     s_log = np.empty(2 * len(s_logclose))
     e_log = np.empty(2 * len(e_logclose))
@@ -75,31 +92,27 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
     e_log[0::2] = e_logopen
     e_log[1::2] = e_logclose
 
-    s_ret = np.diff(s_log)
-    e_ret = np.diff(e_log)
-
-    cap_value = 0.15
-    s_ret = np.clip(s_ret, -cap_value, cap_value)
-    e_ret = np.clip(e_ret, -cap_value, cap_value)
+    s_ret = np.clip(np.diff(s_log), -0.15, 0.15)
+    e_ret = np.clip(np.diff(e_log), -0.15, 0.15)
     excessret = s_ret - e_ret
-    dates_dt = merged_df['date'].iloc[1:].reset_index(drop=True)
+    dates_dt = merged_df["date"].iloc[1:].reset_index(drop=True)
 
     if plotcheck:
         plt.figure(figsize=(14, 6))
-        plt.plot(merged_df['date'], merged_df['AdjClose_stock'], label=f'{stock} AdjClose', color='blue')
-        plt.title(f'{stock} Adjusted Close Price')
-        plt.xlabel('Date')
-        plt.ylabel('Price')
+        plt.plot(merged_df["date"], merged_df["AdjClose_stock"], label=f"{stock} AdjClose")
+        plt.title(f"{stock} Adjusted Close Price")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
         plt.legend()
         plt.grid(True)
         plt.show()
         plt.figure(figsize=(14, 6))
-        plt.plot(dates_dt, s_ret, alpha=0.7, label='Stock Returns', color='green')
-        plt.plot(dates_dt, e_ret, alpha=0.7, label='ETF Returns', color='orange')
-        plt.plot(dates_dt, excessret, alpha=0.7, label='Excess Returns', color='red')
-        plt.title(f'Returns for {stock} vs {etf}')
-        plt.xlabel('Date')
-        plt.ylabel('Log Return')
+        plt.plot(dates_dt, s_ret, alpha=0.7, label="Stock Returns")
+        plt.plot(dates_dt, e_ret, alpha=0.7, label="ETF Returns")
+        plt.plot(dates_dt, excessret, alpha=0.7, label="Excess Returns")
+        plt.title(f"Returns for {stock} vs {etf}")
+        plt.xlabel("Date")
+        plt.ylabel("Log Return")
         plt.legend()
         plt.grid(True)
         plt.show()
@@ -108,36 +121,35 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
 
 
 def rawreturns(dataloc, stock, plotcheck=False):
-    s_df = pd.read_csv(dataloc + stock + ".csv")
-    dates_dt = pd.to_datetime(s_df['date'])
-    d1 = pd.to_datetime("2022-01-01")
-    smp = dates_dt < d1
-    s_df = s_df[smp]
-    dates_dt = pd.to_datetime(s_df['date'])
-    s_logclose = np.log(s_df['AdjClose'])
-    s_logopen = np.log(s_df['AdjOpen'])
-    s_log = np.zeros(2 * len(s_logclose))
-    for i in range(len(s_logclose)):
-        s_log[2 * i] = s_logopen[i]
-        s_log[2 * i + 1] = s_logclose[i]
-    s_ret = np.diff(s_log)
-    s_ret[s_ret > 0.15] = 0.15
-    s_ret[s_ret < -0.15] = -0.15
-    dates_dt = pd.to_datetime(s_df['date'])
+    s_df = _load_price_frame(dataloc, stock)
+    s_df = s_df[s_df["date"] < pd.Timestamp("2022-01-01")].reset_index(drop=True)
+    if len(s_df) < 2:
+        raise ValueError(f"Not enough observations for '{stock}' to construct returns.")
+
+    s_logclose = np.log(s_df["AdjClose"].to_numpy())
+    s_logopen = np.log(s_df["AdjOpen"].to_numpy())
+    s_log = np.empty(2 * len(s_df))
+    s_log[0::2] = s_logopen
+    s_log[1::2] = s_logclose
+    s_ret = np.clip(np.diff(s_log), -0.15, 0.15)
+
+    # Each return is an interval endpoint: close on day i, or open on day i+1.
+    dates_dt = pd.Series(np.repeat(s_df["date"].to_numpy(), 2)[1:])
 
     if plotcheck:
-        plt.figure(stock + " price")
-        plt.title(stock + " price")
-        plt.plot(dates_dt, s_df['AdjClose'])
+        plt.figure(f"{stock} price")
+        plt.title(f"{stock} price")
+        plt.plot(s_df["date"], s_df["AdjClose"])
         plt.xlabel("date")
         plt.ylabel("price in USD")
         plt.show()
-        plt.figure("Returns " + stock)
-        plt.title("Returns " + stock)
-        plt.plot(range(len(s_ret)), s_ret)
-        plt.legend()
+        plt.figure(f"Returns {stock}")
+        plt.title(f"Returns {stock}")
+        plt.plot(dates_dt, s_ret)
+        plt.xlabel("date")
+        plt.ylabel("log return")
         plt.show()
-    return s_ret, dates_dt
+    return s_ret, dates_dt.reset_index(drop=True)
 
 
 __all__ = ["excessreturns_closeonly", "excessreturns", "rawreturns"]
