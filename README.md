@@ -2,7 +2,7 @@
 
 A clean, modular reproduction/application of the **Fin-GAN** methodology of Vuletić & Cont (2023), applied to **half-day excess log-returns for TCS relative to the Nifty IT benchmark**.
 
-> **Research note:** This repository is intended for reproducible experimentation and engineering study. Reported performance depends on the dataset, split, seed, hyperparameters, and evaluation procedure. The repository does **not** claim the original resume-style performance figures unless they are reproduced by a documented experiment.
+> **Research note:** This repository is intended for reproducible experimentation and engineering study. Reported performance depends on the dataset, split, seed, hyperparameters, and evaluation procedure. The numerical results below are from a documented local TCS run and should not be generalized to other assets or time periods.
 
 ## Highlights
 
@@ -13,6 +13,21 @@ A clean, modular reproduction/application of the **Fin-GAN** methodology of Vule
 - Separate modules for data preparation, models, objectives, training, evaluation, and experiment orchestration.
 - Historical figures, metrics, checkpoints, and the original PDF write-up preserved under `results/` and `docs/`.
 - Automated tests covering core objectives, model behavior, training updates, evaluation, validation, and checkpoint round-trips.
+
+## Verified local results
+
+A full TCS experiment was run locally with **100 GAN epochs, 500 LSTM epochs, 10 gradient-calibration epochs, and CPU execution**. The run completed successfully and produced the expected metrics, figures, and checkpoints.
+
+The best observed held-out metrics among the objective variants in that run were:
+
+| Model | Best objective | Test PnL | Test scaled Sharpe | Test RMSE | Test MAE |
+| --- | --- | ---: | ---: | ---: | ---: |
+| GAN | MSE | 9.4884 | 1.8527 | 0.00649 | 0.00470 |
+| LSTM | STD | 12.3147 | 2.3564 | 0.00633 | 0.00452 |
+
+These are **run-specific observations**, not claims of statistical significance or out-of-sample generalization. The experiment evaluates multiple objectives, so the best metric depends on which objective is selected. In particular, lower forecasting error does not automatically imply better trading performance.
+
+The current repository does **not** report a verified 3.18 Sharpe ratio or 85% directional accuracy. Directional accuracy is not currently a directly computed metric in the consolidated result tables, so it should not be inferred from the positive/negative prediction proportions.
 
 ## Architecture
 
@@ -127,7 +142,7 @@ The test suite is the fastest way to verify the installation and core implementa
 pytest -q
 ```
 
-The current refactored project has been validated locally with:
+The refactored project has been validated locally with:
 
 ```text
 14 passed
@@ -145,7 +160,7 @@ This checks that the end-to-end pipeline can load data, train the objectives, ev
 
 ## Run a longer experiment
 
-For a more substantial TCS experiment:
+For a substantial TCS experiment:
 
 ```bash
 python scripts/run_experiment.py \
@@ -161,7 +176,7 @@ For CPU-only execution, append `--cpu`:
 python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 100 --cpu
 ```
 
-The runner is currently **CLI-driven**. `configs/default.yaml` documents the intended configuration, but the current runner does not automatically load that YAML file.
+The verified local results above used `--gradient-epochs 10`. The runner is currently **CLI-driven**. `configs/default.yaml` documents the intended configuration, but the current runner does not automatically load that YAML file.
 
 ## Outputs
 
@@ -205,7 +220,7 @@ When reporting results, compare models using the same:
 - objective definition
 - random-seed protocol
 
-Avoid presenting a single favorable metric without its evaluation context.
+Avoid presenting a single favorable metric without its evaluation context. The verified local results above should be treated as one experimental run, not as a universal benchmark.
 
 ## Attribution
 
