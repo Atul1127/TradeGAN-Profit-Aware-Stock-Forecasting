@@ -1,130 +1,89 @@
-import TradeGAN
-import pandas as pd
-import matplotlib.pyplot as plt
+"""Run the archived TradeGAN experiment with project-relative paths."""
 
-h = 1
-l = 10
-pred = 1
+from pathlib import Path
+import argparse
+import sys
 
-dataloc = "/home/harsh/Hackathons/TradeGAN/data/"
-etflistloc = "/home/harsh/Hackathons/TradeGAN/stocks-etfs-list.csv"
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
-n_epochs = 100
-ngpu = 1
+from tradegan import legacy
 
-loc = "/home/harsh/Hackathons/TradeGAN/Trade-GAN_results/"
-modelsloc = loc + "TrainedModels/"
-plotsloc = loc + "Plots/"
-resultsloc = loc + "Results/"
 
-tanh_coeff = 100
-z_dim = 8
-hid_d = 8
-hid_g = 8
+def run(ticker: str, gan_epochs: int = 100, lstm_epochs: int = 500) -> None:
+    data_dir = ROOT / "data"
+    metadata = ROOT / "stocks-etfs-list.csv"
+    results_dir = ROOT / "results"
+    checkpoints_dir = results_dir / "checkpoints"
+    figures_dir = results_dir / "figures"
+    metrics_dir = results_dir / "metrics"
 
-checkpoint_epoch = 20
-batch_size = 100
-diter = 1
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
+    metrics_dir.mkdir(parents=True, exist_ok=True)
 
-lrg_s = [0.0001]
-lrd_s = [0.0001]
-hid_d_s = [8]
-hid_g_s = [8]
-nres = len(lrg_s)
+    legacy.FinGAN_combos(
+        ticker,
+        str(results_dir) + "/",
+        str(checkpoints_dir) + "/",
+        str(figures_dir) + "/",
+        str(data_dir) + "/",
+        str(metadata),
+        vl_later=True,
+        lrg=0.0001,
+        lrd=0.0001,
+        n_epochs=gan_epochs,
+        ngrad=100,
+        h=1,
+        l=10,
+        pred=1,
+        ngpu=1,
+        tanh_coeff=100,
+        tr=0.8,
+        vl=0.1,
+        z_dim=8,
+        hid_d=8,
+        hid_g=8,
+        checkpoint_epoch=20,
+        batch_size=100,
+        diter=1,
+        plot=False,
+    )
 
-tr = 0.8
-vl = 0.1
-ngrad = 100
-vl_later = True
+    legacy.LSTM_combos(
+        ticker,
+        str(results_dir) + "/",
+        str(checkpoints_dir) + "/",
+        str(figures_dir) + "/",
+        str(data_dir) + "/",
+        str(metadata),
+        vl_later=True,
+        lrg=0.0001,
+        lrd=0.0001,
+        n_epochs=lstm_epochs,
+        ngrad=100,
+        h=1,
+        l=10,
+        pred=1,
+        ngpu=1,
+        tanh_coeff=100,
+        tr=0.8,
+        vl=0.1,
+        z_dim=32,
+        hid_d=64,
+        hid_g=1,
+        checkpoint_epoch=20,
+        batch_size=100,
+        diter=1,
+        plot=False,
+        freq=2,
+    )
 
-plot = False
 
-datastart = {'lrd': [], 'lrg': [], 'epochs': [], 'SR_val': []}
-results_df = pd.DataFrame(data=datastart)
-tickers = ['TCS']
-corrs = [False] * len(tickers)
-
-resultsname = "results.csv"
-plt.rcParams['figure.figsize'] = [15.75, 9.385]
-
-for j in range(len(hid_d_s)):
-    for i in range(nres):
-        lrg = lrg_s[i]
-        lrd = lrd_s[i]
-
-        for tickern in range(len(tickers)):
-            ticker = tickers[tickern]
-            print("******************")
-            print(f"Processing Ticker: {ticker}")
-            print("******************")
-
-            df_temp, corrs[tickern] = TradeGAN.FinGAN_combos(
-                ticker,
-                loc,
-                modelsloc,
-                plotsloc,
-                dataloc,
-                etflistloc,
-                vl_later,
-                lrg,
-                lrd,
-                n_epochs,
-                ngrad,
-                h,
-                l,
-                pred,
-                ngpu,
-                tanh_coeff,
-                tr,
-                vl,
-                z_dim,
-                hid_d,
-                hid_g,
-                checkpoint_epoch,
-                batch_size=batch_size,
-                diter=diter,
-                plot=plot
-            )
-
-            results_df = pd.concat([results_df, df_temp], ignore_index=True)
-            results_df.to_csv(resultsloc + resultsname)
-
-            print(f"Completed Processing (FinGAN Combos) for Ticker: {ticker}")
-
-            print("******************")
-            print(f"Processing Ticker (LSTM Combos): {ticker}")
-            print("******************")
-
-            e = TradeGAN.LSTM_combos(
-                ticker,
-                loc,
-                modelsloc,
-                plotsloc,
-                dataloc,
-                etflistloc,
-                vl_later=True,
-                lrg=0.0001,
-                lrd=0.0001,
-                n_epochs=500,
-                ngrad=100,
-                h=1,
-                l=10,
-                pred=1,
-                ngpu=1,
-                tanh_coeff=100,
-                tr=0.8,
-                vl=0.1,
-                z_dim=32,
-                hid_d=64,
-                hid_g=1,
-                checkpoint_epoch=20,
-                batch_size=100,
-                diter=1,
-                plot=False,
-                freq=2
-            )
-
-            print(f"Completed Processing (LSTM Combos) for Ticker: {ticker}")
-            print("*************")
-
-print("DONE")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the archived TradeGAN experiment.")
+    parser.add_argument("--ticker", default="TCS")
+    parser.add_argument("--gan-epochs", type=int, default=100)
+    parser.add_argument("--lstm-epochs", type=int, default=500)
+    args = parser.parse_args()
+    run(args.ticker, args.gan_epochs, args.lstm_epochs)
