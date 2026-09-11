@@ -1,4 +1,4 @@
-"""Download stock and benchmark OHLC data into the local data directory."""
+"""Download adjusted stock and benchmark OHLC data into the local data directory."""
 
 from pathlib import Path
 import argparse
@@ -27,25 +27,24 @@ def download_data(
     for _, row in metadata.iterrows():
         stock = str(row["ticker_x"])
         benchmark = str(row["ticker_y"])
-        tickers = (stock + exchange_suffix, benchmark)
 
-        for ticker in tickers:
+        for ticker in (stock + exchange_suffix, benchmark):
             data = yf.download(
                 ticker,
                 start=start_date,
                 end=end_date,
                 progress=False,
-                auto_adjust=False,
+                auto_adjust=True,
             )
             if data.empty:
                 print(f"No data returned for {ticker}; skipping.")
                 continue
 
             data = data[["Open", "Close"]].copy()
-            data.columns = ["Open", "Close"]
+            data.columns = ["AdjOpen", "AdjClose"]
             data.reset_index(inplace=True)
             data.rename(columns={"Date": "date"}, inplace=True)
-            data = data.dropna(subset=["date", "Open", "Close"])
+            data = data.dropna(subset=["date", "AdjOpen", "AdjClose"])
             data = data.sort_values("date").drop_duplicates("date", keep="last")
 
             base_ticker = ticker[:-len(exchange_suffix)] if ticker.endswith(exchange_suffix) else ticker
