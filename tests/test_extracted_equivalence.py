@@ -21,8 +21,8 @@ from tradegan.utils.trading_metrics import getSR as extracted_getSR
 
 
 def _write_market_files(tmp_path):
-    dates = pd.date_range("2020-01-01", periods=30, freq="D")
-    base = np.linspace(100.0, 130.0, len(dates))
+    dates = pd.date_range("2020-01-01", periods=120, freq="D")
+    base = np.linspace(100.0, 220.0, len(dates))
     stock = pd.DataFrame({"date": dates, "AdjOpen": base, "AdjClose": base + 1.0})
     benchmark = pd.DataFrame({"date": dates, "AdjOpen": base * 0.9, "AdjClose": base * 0.9 + 0.5})
     stock.to_csv(tmp_path / "TCS.csv", index=False)
