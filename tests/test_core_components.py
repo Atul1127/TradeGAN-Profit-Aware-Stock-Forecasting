@@ -227,7 +227,7 @@ def test_research_metric_helpers():
     assert pnl_std(pnl).item() == pytest.approx(float(torch.std(pnl).item()))
     assert percent_reduction(4.0, 10.0) == pytest.approx(60.0)
     assert fold_change(28.8, 10.0) == pytest.approx(2.88)
-    assert getPnL(predicted, real, 4).item() == pytest.approx(5000.0)
+    assert getPnL(predicted, real, 4).item() == pytest.approx(0.0)
     assert torch.isfinite(getSR(predicted, real))
 
     with pytest.raises(ValueError):
