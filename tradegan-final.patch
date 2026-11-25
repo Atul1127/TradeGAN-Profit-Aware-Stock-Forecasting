@@ -1,0 +1,75 @@
+diff --git a/README.md b/README.md
+index 3b1abae..3354ac8 100644
+--- a/README.md
++++ b/README.md
+@@ -13,7 +13,7 @@ The central idea is to optimize the generator for both forecast quality and trad
+ 
+ ## Results
+ 
+-These results come from the controlled run after the November 2026 fixes: TCS against Nifty IT, 2010–2021, an 80/10/10 time split, a test window of 291 trading days, seed 42, 100 GAN epochs, 500 LSTM epochs and 25 calibration epochs. PnL is gross, in bps of pair notional per day. Sharpe is annualised. All figures come from **one seed**; see [Known limitations](#known-limitations).
++These results come from the controlled run after the November 2026 fixes: TCS against Nifty IT, 2010–2021, an 80/10/10 time split, a test window of 291 trading days, seed 42, 100 GAN epochs, 500 LSTM epochs and 25 calibration epochs. PnL is gross, in bps of pair notional per day. Sharpe is annualised. The tables below use seed 42; the [seed check](#seed-check-and-costs) repeats the selection over three more seeds and adds costs.
+ 
+ ### Headline (objective chosen on validation only)
+ 
+@@ -30,6 +30,26 @@ Validation Sharpe picked `SR MSE` (2.67, the highest of the 9 objectives). It wa
+ 
+ TCS lagged the index over the test year, so always-short is the bar to beat. `SR MSE` was long half the time and beat it by 5.9 bps a day. With its average position removed, its Sharpe stays at 2.6, so its profit comes from timing rather than a directional bet. Its hit rate was 57% of days and its maximum drawdown about 830 bps. Intraday half-days contributed more (Sharpe 2.36) than overnight ones (1.05).
+ 
++### Seed check and costs
++
++The same procedure (select on validation, test once) was repeated with seeds 1–3. Seeds 4 and 5 were not completed.
++
++| Seed | Selected objective | Test PnL | Test Sharpe | Long share | Over always-short | Timing Sharpe | Break-even cost (bps) | Net Sharpe at 5 bps |
++| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
++| 42 | `SR MSE` | 14.38 | 2.61 | 50% | +5.86 | 2.62 | not measured | not measured |
++| 1 | `SR MSE` | 7.66 | 1.40 | 50% | −0.85 | 1.89 | 5.0 | 0.00 |
++| 2 | `PnL MSE` | 13.64 | 2.34 | 52% | +5.12 | 2.41 | 6.1 | 0.43 |
++| 3 | `MSE` | 9.80 | 1.74 | 54% | +1.28 | 1.88 | 4.9 | −0.02 |
++
++**Conclusion.**
++
++- **The timing signal held up.** In all four runs the selected model was balanced between long and short. Timing-only Sharpe ranged from 1.9 to 2.6, and test Sharpe from 1.4 to 2.6, with a mean of about 2.0.
++- **It beat always-short in three of four runs.**
++- **The winning objective depends on the seed.** One seed selected plain `MSE`, so the evidence that the economic losses cause the edge is inconclusive.
++- **The edge does not survive costs.** The selected models trade about 1.5–2.2 units of the pair per day, and their break-even cost is about 5–6 bps per unit traded. At an assumed 5 bps, net Sharpe is roughly zero. Trading less often, for example only when P(up) is far from 50%, is the obvious next step.
++
++ForGAN's test Sharpe across seeds 1–3 ranged from −0.91 to 0.93.
++
+ ### All GAN objectives (test)
+ 
+ This table shows every objective for comparison. It is not a selection table: picking the best row by test Sharpe would be selecting on the test set.
+@@ -66,7 +86,7 @@ No LSTM beat always-short on test.
+ 
+ - **Validation is a weak guide to test performance.** Across the 9 GAN objectives, the rank correlation between validation and test Sharpe is 0.47. For the 6 LSTMs it is −0.43. `SR MSE` topped both validation and test here, but `PnL MSE SR` made the same on test after ranking 6th on validation. Seed-to-seed variation could easily reorder objectives.
+ - **Sampling error is large.** Over 291 days, the standard error of an annualised Sharpe is about 0.93, so 2.61 has a 95% interval of roughly 0.8 to 4.4.
+-- **No costs in these numbers.** A model that is long half the time changes position often. The runner now reports turnover, break-even cost and net Sharpe; those columns appear from the next run.
++- **No costs in these numbers.** The seed check shows the break-even cost is about 5–6 bps per unit traded, so the edge is roughly cancelled by realistic costs.
+ 
+ Pre-fix results are archived in `results/metrics/pre_fix_sweep/`. They are not comparable with the tables above.
+ 
+@@ -86,7 +106,7 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
+ 
+ ## Known limitations
+ 
+-1. **One seed, one stock, one test year (291 days).** Use the multi-seed workflow under [Run](#run) before ranking objectives.
++1. **Four seeds, one stock, one test year (291 days).** The selected objective changes with the seed. More seeds and walk-forward test years are needed before ranking objectives.
+ 2. **Costs are an assumption.** Net PnL subtracts a flat cost per unit of pair notional traded (default 5 bps, one-way, both legs together; `--cost-bps`). Real costs depend on brokerage, taxes, spreads and the instruments used. Report the break-even cost alongside it.
+ 3. **Not directly tradeable.** The short leg is the Nifty IT index, which would need index futures or an ETF. A cash-market short of TCS cannot be held overnight in India. The backtest trades exactly at the official close, which is also an input to the overnight forecast.
+ 4. **1:1 hedge.** The target is TCS minus the index, not a beta-weighted residual, and TCS is a large constituent of the index.
+diff --git a/scripts/run_experiment.py b/scripts/run_experiment.py
+index 10e15a5..3b39c3c 100644
+--- a/scripts/run_experiment.py
++++ b/scripts/run_experiment.py
+@@ -2,6 +2,12 @@
+ 
+ from __future__ import annotations
+ 
++import os
++
++# Write plots to files only. Interactive backends (TkAgg on Windows) can crash
++# long runs with "main thread is not in main loop".
++os.environ.setdefault("MPLBACKEND", "Agg")
++
+ import argparse
+ import random
+ from pathlib import Path
