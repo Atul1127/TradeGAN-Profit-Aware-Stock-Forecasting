@@ -32,3 +32,4 @@ Thumbs.db
 
 # Packaging
 *.egg-info/
+/results/seeds/*/checkpoints/

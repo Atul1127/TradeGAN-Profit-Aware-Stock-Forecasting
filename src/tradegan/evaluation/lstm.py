@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 
 from ..utils.trading_metrics import directional_accuracy, pnl_std
-from .common import annualised_sharpe, half_day_split, paired_pnl, position_diagnostics, safe_corr
+from .common import DEFAULT_COST_BPS, annualised_sharpe, half_day_split, paired_pnl, position_diagnostics, safe_corr
 
 
 def _evaluate(model, data, lookback, hidden_dim, device, start=None):
@@ -50,6 +50,7 @@ def Evaluation2LSTM(
     plot=False,
     test_start=None,
     val_start=None,
+    cost_bps=DEFAULT_COST_BPS,
 ):
     """Evaluate deterministic LSTM forecasts on test and validation data.
 
@@ -90,8 +91,8 @@ def Evaluation2LSTM(
         "Pos mn val": float((val_pred > 0).float().mean()),
         "Neg mn val": float((val_pred < 0).float().mean()),
     }
-    metrics.update(position_diagnostics(test_pos, test_real, test_start))
-    metrics.update(position_diagnostics(val_pos, val_real, val_start, suffix=" val"))
+    metrics.update(position_diagnostics(test_pos, test_real, test_start, cost_bps=cost_bps))
+    metrics.update(position_diagnostics(val_pos, val_real, val_start, suffix=" val", cost_bps=cost_bps))
 
     # (overnight, intraday) when test_start is known, otherwise (even, odd).
     first_half, second_half = (x.cpu().numpy() for x in half_day_split(test_pnl, test_start))

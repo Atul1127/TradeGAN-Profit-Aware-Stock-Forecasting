@@ -13,65 +13,62 @@ The central idea is to optimize the generator for both forecast quality and trad
 
 ## Results
 
-> **Status (Nov 2026): the numbers below predate the fixes listed in [Changes since the reported results](#changes-since-the-reported-results) and need a re-run.** In particular, gradient calibration used to train every non-ForGAN model for extra epochs, so the GAN-vs-ForGAN comparison was not on equal terms. Treat every figure here as a single-run observation, not a benchmark.
+These results come from the controlled run after the November 2026 fixes: TCS against Nifty IT, 2010–2021, an 80/10/10 time split, a test window of 291 trading days, seed 42, 100 GAN epochs, 500 LSTM epochs and 25 calibration epochs. PnL is gross, in bps of pair notional per day. Sharpe is annualised. All figures come from **one seed**; see [Known limitations](#known-limitations).
 
-Two result views are preserved: the consolidated objective sweep and a controlled research-comparison run.
+### Headline (objective chosen on validation only)
 
-### All GAN objectives — test results (consolidated sweep)
+Validation Sharpe picked `SR MSE` (2.67, the highest of the 9 objectives). It was then evaluated once on test.
 
-This table shows every objective's **test** metrics side by side. It is not a model-selection table: the objective to report is the one chosen on validation (`PnL SR`, validation Sharpe 2.59), which scored **0.76** on test. Picking the best row by test Sharpe would be selecting on the test set.
-
-| Objective | Val Sharpe | Test PnL (bps/day) | Test Sharpe | Long share (test) | Test RMSE | Test MAE |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `MSE` | 0.01 | −4.25 | −0.96 | 84% | 0.00966 | 0.00767 |
-| `BCE` (ForGAN) | −0.05 | −4.19 | −0.94 | 84% | 0.00965 | 0.00767 |
-| `PnL MSE` | 1.74 | 0.93 | 0.82 | 57% | 0.00648 | 0.00467 |
-| `PnL MSE STD` | 1.44 | 3.22 | 1.31 | 45% | 0.00648 | 0.00467 |
-| `PnL MSE SR` | 2.31 | 3.35 | 0.85 | 65% | 0.00685 | 0.00513 |
-| `PnL` | 0.28 | 1.35 | 1.15 | 64% | 0.00653 | 0.00465 |
-| **`PnL SR`** (validation choice) | **2.59** | 3.40 | 0.76 | 66% | 0.00743 | 0.00576 |
-| `PnL STD` | 0.68 | 8.93 | 1.67 | 0% | 0.12479 | 0.12292 |
-| `SR` | 0.68 | 8.93 | 1.67 | 0% | 0.47092 | 0.47001 |
-| `SR MSE` | 1.79 | 9.86 | 2.00 | 6% | 0.10053 | 0.08667 |
-| *Always short (no model)* | — | *8.93* | *1.67* | *0%* | — | — |
-
-**How to read this table.**
-
-- `PnL STD` and `SR` predicted a negative excess return on every test and validation half-day, and their saved PnL series are byte-for-byte identical. They are the always-short strategy (short TCS, long Nifty IT), not forecasts.
-- TCS lagged the index over the test year, so always-short alone made 8.93 bps a day (Sharpe 1.67). `SR MSE` was short 94% of the time and beat that by about 1 bp a day. Most of its result is the same directional bet.
-- `MSE` and `BCE` were long about 84% of the time in the same year, which explains much of their loss. Their result is also mostly direction bias rather than bad timing.
-- The objectives with very large RMSE (`PnL STD`, `SR`, `SR MSE`) pushed predictions far from zero. This is consistent with the `tanh(100·x)` surrogate rewarding prediction size, not just sign, at typical return sizes.
-
-### LSTM baseline (consolidated sweep)
-
-| Objective | Test PnL | Test Sharpe | Test RMSE | Test MAE |
+| Test metric | `SR MSE` | ForGAN | Best LSTM on validation (`SR`) | Always short |
 | --- | ---: | ---: | ---: | ---: |
-| `STD` | 12.31 | 2.36 | 0.00633 | 0.00452 |
+| PnL (bps/day) | **14.38** | 2.56 | 3.40 | 8.52 |
+| Sharpe | **2.61** | 0.44 | 0.59 | 1.62 |
+| Directional accuracy | 55.8% | 50.0% | 51.0% | — |
+| Long share | 50.2% | 73.9% | 66.3% | 0% |
+| PnL over best constant position | **+5.86** | −5.96 | −5.12 | 0 |
+| Timing-only Sharpe | **2.62** | 1.29 | 1.12 | — |
 
-In this sweep an LSTM trained with an economic loss beat every GAN objective on test. Again, this is a test-set comparison, not a validation choice.
+TCS lagged the index over the test year, so always-short is the bar to beat. `SR MSE` was long half the time and beat it by 5.9 bps a day. With its average position removed, its Sharpe stays at 2.6, so its profit comes from timing rather than a directional bet. Its hit rate was 57% of days and its maximum drawdown about 830 bps. Intraday half-days contributed more (Sharpe 2.36) than overnight ones (1.05).
 
-### Controlled research comparison
+### All GAN objectives (test)
 
-A controlled TCS run used 100 GAN epochs, 500 LSTM epochs, 25 gradient-calibration epochs, seed 42 and CPU execution. The GAN objective was selected on **validation** scaled Sharpe only, then evaluated once on the held-out test set. It selected `SR MSE`.
+This table shows every objective for comparison. It is not a selection table: picking the best row by test Sharpe would be selecting on the test set.
 
-| Comparison | Selected GAN (`SR MSE`) | Baseline |
-| --- | ---: | ---: |
-| Test PnL (bps/day) vs ForGAN | 15.20 | 2.37 |
-| Test scaled Sharpe vs ForGAN | 2.73 | 0.41 |
-| Directional accuracy vs ForGAN | 57.90% | 50.17% |
-| Test MSE vs ForGAN | 0.000040 | 0.000044 |
-| Test PnL vs LSTM:SR | 15.20 | 5.91 |
-| Test scaled Sharpe vs LSTM:SR | 2.73 | 1.02 |
+| Objective | Val Sharpe | Test PnL | Test Sharpe | Long share | Over best constant | Timing Sharpe |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **`SR MSE`** (selected) | **2.67** | 14.38 | 2.61 | 50% | +5.86 | 2.62 |
+| `PnL MSE SR` | 0.46 | 14.43 | 2.57 | 51% | +5.91 | 2.61 |
+| `PnL MSE` | −0.23 | 6.57 | 1.16 | 69% | −1.95 | 1.84 |
+| `PnL SR` | 1.88 | 5.72 | 1.02 | 62% | −2.80 | 1.40 |
+| `PnL MSE STD` | 1.04 | 1.67 | 0.29 | 50% | −6.85 | 0.27 |
+| `PnL STD` | 1.78 | 0.07 | 0.01 | 54% | −8.45 | 0.12 |
+| `PnL` | 1.08 | −0.84 | −0.15 | 55% | −9.36 | 0.00 |
+| `SR` | 0.39 | −8.69 | −1.47 | 63% | −17.21 | −1.14 |
+| `MSE` | −0.41 | −9.28 | −1.67 | 61% | −17.80 | −1.36 |
+| ForGAN (adversarial only) | 0.25 | 2.56 | 0.44 | 74% | −5.96 | 1.29 |
 
-Caveats for this run:
+Only the two objectives that combine MSE with the Sharpe term beat always-short. They made almost the same PnL, but their daily PnLs correlate only 0.54, so they are not the same model. No objective collapsed to always one side after the fixes. Before the fixes, `SR` and `PnL STD` had been short 100% of the time.
 
-- It was produced with the calibration bug, so every objective except ForGAN had 25 extra training epochs.
-- Its long/short split was not recorded. The same objective was short 94% of the time in the sweep, so the always-short benchmark (Sharpe 1.67 on the same test year) is the bar to clear, not ForGAN.
-- With about 261 test days, the standard error of an annualised Sharpe ratio is roughly 1, so 2.73 has a 95% interval of roughly 0.8 to 4.7. The winner was also picked from 9 objectives with one seed.
+### LSTM baselines (test)
 
-### Interpretation
+| Objective | Val Sharpe | Test PnL | Test Sharpe | Long share | Over best constant |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `SR` (selected on validation) | 2.23 | 3.40 | 0.59 | 66% | −5.12 |
+| `PnL` | 1.42 | 6.25 | 1.08 | 66% | −2.27 |
+| `MSE` | 0.93 | 6.16 | 1.10 | 60% | −2.35 |
+| `STD` | 0.72 | 6.08 | 1.04 | 56% | −2.44 |
+| `PnL STD` | 1.68 | 6.06 | 1.05 | 67% | −2.46 |
+| `PnL SR` | 1.57 | 1.23 | 0.22 | 66% | −7.29 |
 
-Forecast accuracy and trading profit are different objectives: the lowest-error models (`MSE`, `BCE`) lost money. But the saved results cannot yet separate forecasting skill from a directional bet that happened to pay off in a single test year. The re-run reports constant-position baselines and timing-only PnL so that question can be answered.
+No LSTM beat always-short on test.
+
+### How much to trust this
+
+- **Validation is a weak guide to test performance.** Across the 9 GAN objectives, the rank correlation between validation and test Sharpe is 0.47. For the 6 LSTMs it is −0.43. `SR MSE` topped both validation and test here, but `PnL MSE SR` made the same on test after ranking 6th on validation. Seed-to-seed variation could easily reorder objectives.
+- **Sampling error is large.** Over 291 days, the standard error of an annualised Sharpe is about 0.93, so 2.61 has a 95% interval of roughly 0.8 to 4.4.
+- **No costs in these numbers.** A model that is long half the time changes position often. The runner now reports turnover, break-even cost and net Sharpe; those columns appear from the next run.
+
+Pre-fix results are archived in `results/metrics/pre_fix_sweep/`. They are not comparable with the tables above.
 
 ## Method
 
@@ -89,15 +86,15 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
 
 ## Known limitations
 
-1. **One stock, one test year, one seed.** A Sharpe of about 2 over about 261 test days is roughly ±1. Walk-forward testing and 5–10 seeds per objective are needed before ranking objectives.
-2. **No transaction costs.** PnL is `sign(forecast) × return`, with no brokerage, taxes, spread or slippage. The strategy can change position at every open and close.
-3. **Not directly tradeable.** The short leg is the Nifty IT index itself, which would need index futures or an ETF. A cash-market short of TCS cannot be held overnight in India. The backtest also trades exactly at the official close, which is also an input to the overnight forecast.
+1. **One seed, one stock, one test year (291 days).** Use the multi-seed workflow under [Run](#run) before ranking objectives.
+2. **Costs are an assumption.** Net PnL subtracts a flat cost per unit of pair notional traded (default 5 bps, one-way, both legs together; `--cost-bps`). Real costs depend on brokerage, taxes, spreads and the instruments used. Report the break-even cost alongside it.
+3. **Not directly tradeable.** The short leg is the Nifty IT index, which would need index futures or an ETF. A cash-market short of TCS cannot be held overnight in India. The backtest trades exactly at the official close, which is also an input to the overnight forecast.
 4. **1:1 hedge.** The target is TCS minus the index, not a beta-weighted residual, and TCS is a large constituent of the index.
-5. **The LSTMs see one time step.** Inputs are shaped as 1 step × 10 features, so the recurrence is never used and the LSTM acts like a gated feed-forward layer. Reshaping to 10 steps × 1 feature is a planned change.
-6. **No overnight/intraday feature.** The model is not told which half-day it is predicting, although the two behave differently.
-7. **Only the sign of the mean forecast is traded.** The GAN's predicted distribution (for example P(up), now reported as `Mean P(up)`) is not yet used for sizing.
+5. **The LSTMs see one time step.** Inputs are 1 step × 10 features, so the recurrence is never used.
+6. **No overnight/intraday feature.** The model is not told which half-day it predicts.
+7. **Only the sign of the mean forecast is traded.** The GAN's predicted distribution (`Mean P(up)`) is not yet used for sizing.
 
-## Changes since the reported results
+## Changes in the November 2026 fixes
 
 - **Calibration no longer trains the models.** `GradientCheck` and `GradientCheckLSTM` used to call `optimizer.step()` after computing every term's gradient. That trained the real model on the last gradient computed (the volatility term) and gave every objective except ForGAN extra epochs. Calibration now runs on deep copies, and the caller's models and optimizers come back unchanged. Weights use the median of per-batch gradient ratios instead of the mean, which a single near-zero gradient could blow up.
 - **Training uses the tested loss formulas.** The training loops had their own copies of the PnL/MSE/Sharpe/STD formulas, separate from the ones the tests checked. All training and calibration now goes through `objectives.losses`.
@@ -105,6 +102,8 @@ The historical implementation uses a differentiable `tanh` surrogate for sign-ba
 - **Dates match returns.** `excessreturns` returned one date per day for a series with two returns per day. It now returns one date per half-day return.
 - **Daily PnL follows real day boundaries.** Half-day PnLs used to be paired from the first test observation, so a "day" could be an intraday return plus the next overnight return, and the overnight/intraday labels depended on where the split happened to fall. Pairs now run overnight → intraday, and both halves are labelled (`Overnight SR scaled`, `Intraday SR scaled`).
 - **New baselines and diagnostics in every result row (test and validation):** `Long share`, always-long and always-short PnL and Sharpe, `PnL_w over best constant`, and `Timing PnL_w` / `Timing SR scaled` (PnL after removing the model's average position). `research_comparison.csv` carries these for the selected GAN.
+- **Costs and turnover.** Every result row reports `Turnover per day`, `Break-even cost bps`, `Net PnL_w` and `Net SR scaled` at an assumed cost (`--cost-bps`, default 5).
+- **Multi-seed runs.** `--results-dir` writes each run to its own folder, and `scripts/summarize_seeds.py` summarises them.
 - **Test suite repaired.** The stale `legacy` equivalence tests, which compared each function with itself, were removed, and the layout test no longer requires the git-ignored `results/checkpoints/` directory. Regression tests were added for each fix above. Dead modules (`utils/research.py`, `models/lstm.py`) were deleted.
 
 ## Repository layout
@@ -179,7 +178,19 @@ python scripts/run_experiment.py --ticker TCS --gan-epochs 1 --lstm-epochs 1 --g
 python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 --gradient-epochs 25 --seed 42 --cpu
 ```
 
-This run selects the GAN objective from validation scaled Sharpe and writes `results/metrics/research_comparison.csv`, including the selected model's long share and the always-long/always-short baselines for the same test window.
+This run selects the GAN objective on validation scaled Sharpe and writes `results/metrics/research_comparison.csv`. That file includes the selected model's long share, always-long and always-short baselines, turnover, break-even cost and net Sharpe. Add `--cost-bps 3` (or another value) to change the cost assumption.
+
+### Multi-seed check
+
+```bash
+for s in 1 2 3 4 5; do
+  python scripts/run_experiment.py --ticker TCS --gan-epochs 100 --lstm-epochs 500 \
+    --gradient-epochs 25 --seed $s --cpu --results-dir results/seeds/seed_$s
+done
+python scripts/summarize_seeds.py
+```
+
+The summary reports the validation-selected GAN for each seed, which is the honest headline, and every objective's mean and spread over seeds. It writes `results/seeds/selected_per_seed.csv` and `results/seeds/objectives_over_seeds.csv`.
 
 ## Tests
 
@@ -189,13 +200,14 @@ Run:
 pytest -q
 ```
 
-The suite contains **22 tests** covering:
+The suite contains **27 tests** covering:
 
 - objective formulas, and that training uses them
 - calibration leaving models unchanged
 - model behaviour and training updates
 - date alignment and unclipped evaluation targets
 - day-aligned PnL pairing and constant-position baselines
+- turnover and cost accounting, and the multi-seed summary
 - evaluation, data validation and research-comparison alignment
 - checkpoint round-trips
 
@@ -203,7 +215,8 @@ The suite contains **22 tests** covering:
 
 | Path | Contents |
 | --- | --- |
-| `results/metrics/` | CSV metrics, PnL series, and experiment summaries |
+| `results/metrics/` | CSV metrics, PnL series, and experiment summaries; `pre_fix_sweep/` holds archived pre-fix results |
+| `results/seeds/` | Per-seed runs and the multi-seed summary, when run |
 | `results/figures/` | Cumulative PnL plots, written by the runner (none are committed) |
 | `docs/TradeGAN.pdf` | Preserved research write-up |
 

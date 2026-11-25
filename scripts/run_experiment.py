@@ -14,6 +14,7 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from tradegan.evaluation.common import DEFAULT_COST_BPS
 from tradegan.fixed_experiment import run_gan_experiment, run_lstm_experiment
 from tradegan.utils.trading_metrics import fold_change, percent_reduction
 
@@ -45,10 +46,15 @@ _DIAGNOSTIC_COLUMNS = {
     "Always-short SR scaled": "always_short_test_scaled_sharpe",
     "PnL_w over best constant": "selected_pnl_over_best_constant",
     "Timing SR scaled": "selected_timing_scaled_sharpe",
+    "Turnover per day": "selected_turnover_per_day",
+    "Break-even cost bps": "selected_break_even_cost_bps",
+    "Cost bps": "assumed_cost_bps",
+    "Net PnL_w": "selected_net_test_pnl",
+    "Net SR scaled": "selected_net_test_scaled_sharpe",
 }
 
 
-def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
+def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame, output_dir: Path | None = None) -> pd.DataFrame:
     """Select models using validation Sharpe, then compare on the untouched test rows."""
     gan = gan.copy()
     lstm = lstm.copy()
@@ -166,7 +172,8 @@ def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
     if result["test_pnl"].nunique() != 1 or result["test_scaled_sharpe"].nunique() != 1:
         raise AssertionError("Comparison rows disagree on the selected GAN test metrics")
 
-    output = ROOT / "results" / "metrics" / "research_comparison.csv"
+    output_dir = Path(output_dir) if output_dir is not None else ROOT / "results" / "metrics"
+    output = output_dir / "research_comparison.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     result.to_csv(output, index=False)
     print("\n=== Research comparison (selected by validation Sharpe) ===")
@@ -188,7 +195,20 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--cpu", action="store_true", help="Force CPU even when CUDA is available.")
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=ROOT / "results",
+        help="Where metrics/, figures/ and checkpoints/ are written. Use one folder per seed.",
+    )
+    parser.add_argument(
+        "--cost-bps",
+        type=float,
+        default=DEFAULT_COST_BPS,
+        help="Assumed one-way cost in bps of pair notional per unit of position traded (both legs).",
+    )
     args = parser.parse_args()
+    results_dir = args.results_dir if args.results_dir.is_absolute() else ROOT / args.results_dir
 
     _set_seed(args.seed)
 
@@ -199,6 +219,8 @@ def main() -> None:
         gradient_epochs=args.gradient_epochs,
         batch_size=args.batch_size,
         use_gpu=not args.cpu,
+        results_dir=results_dir,
+        cost_bps=args.cost_bps,
     )
 
     lstm_results = run_lstm_experiment(
@@ -208,9 +230,11 @@ def main() -> None:
         gradient_epochs=args.gradient_epochs,
         batch_size=args.batch_size,
         use_gpu=not args.cpu,
+        results_dir=results_dir,
+        cost_bps=args.cost_bps,
     )
 
-    _research_comparison(gan_results, lstm_results)
+    _research_comparison(gan_results, lstm_results, results_dir / "metrics")
 
 
 if __name__ == "__main__":

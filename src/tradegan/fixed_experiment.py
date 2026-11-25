@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 
 from .data.splits import split_train_val_test, split_train_val_testraw, target_start_indices
+from .evaluation.common import DEFAULT_COST_BPS
 from .evaluation.gan import Evaluation2
 from .evaluation.lstm import Evaluation2LSTM
 from .lstm_model import LSTMForecaster
@@ -144,11 +145,14 @@ def run_gan_experiment(
     diter: int = 1,
     use_gpu: bool = True,
     mc_samples: int = 1000,
+    results_dir: Path | None = None,
+    cost_bps: float = DEFAULT_COST_BPS,
 ) -> pd.DataFrame:
     root = Path(root)
-    metrics = root / "results" / "metrics"
-    checkpoints = root / "results" / "checkpoints"
-    figures = root / "results" / "figures"
+    results_dir = Path(results_dir) if results_dir is not None else root / "results"
+    metrics = results_dir / "metrics"
+    checkpoints = results_dir / "checkpoints"
+    figures = results_dir / "figures"
     for directory in (metrics, checkpoints, figures):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -283,6 +287,7 @@ def run_gan_experiment(
             mc_samples,
             test_start=test_start,
             val_start=val_start,
+            cost_bps=cost_bps,
         )
         row = result_df.iloc[0].to_dict()
         row["objective"] = objective
@@ -316,11 +321,14 @@ def run_lstm_experiment(
     tr: float = 0.8,
     vl: float = 0.1,
     use_gpu: bool = True,
+    results_dir: Path | None = None,
+    cost_bps: float = DEFAULT_COST_BPS,
 ) -> pd.DataFrame:
     root = Path(root)
-    metrics = root / "results" / "metrics"
-    checkpoints = root / "results" / "checkpoints"
-    figures = root / "results" / "figures"
+    results_dir = Path(results_dir) if results_dir is not None else root / "results"
+    metrics = results_dir / "metrics"
+    checkpoints = results_dir / "checkpoints"
+    figures = results_dir / "figures"
     for directory in (metrics, checkpoints, figures):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -415,6 +423,7 @@ def run_lstm_experiment(
             False,
             test_start=test_start,
             val_start=val_start,
+            cost_bps=cost_bps,
         )
         row = result_df.iloc[0].to_dict()
         row["objective"] = objective

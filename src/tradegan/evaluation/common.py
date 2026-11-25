@@ -23,6 +23,11 @@ import torch
 
 ANNUALISATION = math.sqrt(252.0)
 
+# Assumed one-way cost, in bps of pair notional, per unit of position traded
+# (both legs together). A flip from short to long trades 2 units. This is an
+# assumption for sensitivity analysis, not a quote: set it with --cost-bps.
+DEFAULT_COST_BPS = 5.0
+
 
 def is_overnight(global_index: int) -> bool:
     return global_index % 2 == 1
@@ -69,8 +74,35 @@ def half_day_split(pnl: torch.Tensor, start: int | None):
     return pnl[overnight_mask], pnl[~overnight_mask]
 
 
+def cost_metrics(position: torch.Tensor, real: torch.Tensor, start: int | None,
+                 cost_bps: float = DEFAULT_COST_BPS, suffix: str = "") -> dict[str, float]:
+    """Turnover, break-even cost and PnL net of a per-unit trading cost.
+
+    The position for each half-day is held from one auction to the next, so
+    the amount traded at each step is ``|p_k - p_{k-1}|`` (the first step opens
+    the position from flat). Net PnL subtracts ``cost_bps`` per unit traded.
+    """
+    if cost_bps < 0:
+        raise ValueError("cost_bps must be non-negative")
+    position = position.to(real.dtype)
+    previous = torch.cat([torch.zeros(1, dtype=position.dtype, device=position.device), position[:-1]])
+    traded = (position - previous).abs()
+    gross = 10000 * position * real
+    daily_gross = paired_pnl(gross, start)
+    daily_traded = paired_pnl(traded, start)
+    daily_net = daily_gross - cost_bps * daily_traded
+    total_traded = float(daily_traded.sum())
+    return {
+        f"Turnover per day{suffix}": float(daily_traded.mean()),
+        f"Break-even cost bps{suffix}": float(daily_gross.sum()) / total_traded if total_traded > 0 else 0.0,
+        f"Cost bps{suffix}": float(cost_bps),
+        f"Net PnL_w{suffix}": float(daily_net.mean()),
+        f"Net SR scaled{suffix}": annualised_sharpe(daily_net),
+    }
+
+
 def position_diagnostics(position: torch.Tensor, real: torch.Tensor, start: int | None,
-                         suffix: str = "") -> dict[str, float]:
+                         suffix: str = "", cost_bps: float = DEFAULT_COST_BPS) -> dict[str, float]:
     """Constant-position baselines and direction-bias diagnostics.
 
     ``position`` is the traded sign (+1 long the stock vs the index, -1 short).
@@ -101,11 +133,14 @@ def position_diagnostics(position: torch.Tensor, real: torch.Tensor, start: int 
         out[f"Intraday PnL mean{suffix}"] = float(intraday.mean()) if intraday.numel() else 0.0
         out[f"Overnight SR scaled{suffix}"] = annualised_sharpe(overnight)
         out[f"Intraday SR scaled{suffix}"] = annualised_sharpe(intraday)
+    out.update(cost_metrics(position, real, start, cost_bps, suffix))
     return out
 
 
 __all__ = [
     "ANNUALISATION",
+    "DEFAULT_COST_BPS",
+    "cost_metrics",
     "annualised_sharpe",
     "day_aligned",
     "half_day_split",

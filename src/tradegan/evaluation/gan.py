@@ -7,6 +7,7 @@ import torch
 
 from ..utils.trading_metrics import directional_accuracy, pnl_std
 from .common import (
+    DEFAULT_COST_BPS,
     annualised_sharpe,
     half_day_split,
     paired_pnl,
@@ -79,6 +80,7 @@ def Evaluation2(
     mc_samples=1000,
     test_start=None,
     val_start=None,
+    cost_bps=DEFAULT_COST_BPS,
 ):
     """Evaluate one GAN on test and validation data.
 
@@ -135,8 +137,8 @@ def Evaluation2(
         "narrow means dist": bool(test_mean.std() < 0.0002),
         "Mean P(up)": float(test["prob_positive"].mean()),
     }
-    metrics.update(position_diagnostics(test["position"], test_real, test_start))
-    metrics.update(position_diagnostics(val["position"], val_real, val_start, suffix=" val"))
+    metrics.update(position_diagnostics(test["position"], test_real, test_start, cost_bps=cost_bps))
+    metrics.update(position_diagnostics(val["position"], val_real, val_start, suffix=" val", cost_bps=cost_bps))
 
     return (
         pd.DataFrame([metrics]),
