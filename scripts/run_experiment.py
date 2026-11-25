@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import os
+
+# Write plots to files only. Interactive backends (TkAgg on Windows) can crash
+# long runs with "main thread is not in main loop".
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 import argparse
 import random
 from pathlib import Path
