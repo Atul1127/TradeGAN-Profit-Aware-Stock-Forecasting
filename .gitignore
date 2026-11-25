@@ -29,3 +29,6 @@ env/
 Thumbs.db
 .vscode/
 .idea/
+
+# Packaging
+*.egg-info/

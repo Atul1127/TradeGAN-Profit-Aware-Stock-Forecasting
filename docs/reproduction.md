@@ -32,6 +32,7 @@ The resulting `results/metrics/research_comparison.csv` reports:
 - directional accuracy
 - MSE and MSE reduction percentage
 - PnL standard deviation and its reduction percentage
+- the selected model's long share, always-long and always-short PnL and Sharpe on the same test window, PnL over the best constant position, and timing-only Sharpe
 
 This makes the reported performance claims directly testable rather than inferred from positive/negative prediction proportions or unrelated metrics.
 

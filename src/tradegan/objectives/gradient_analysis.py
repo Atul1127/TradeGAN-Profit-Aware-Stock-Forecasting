@@ -1,5 +1,20 @@
-"""Gradient-scale calibration utilities for TradeGAN."""
+"""Gradient-scale calibration utilities for TradeGAN.
+
+Calibration measures how hard each loss term pushes the generator, so the
+terms can be weighted to push about as hard as the base term (BCE for the GAN,
+MSE for the LSTM).
+
+Calibration must not change the models that are later trained and compared.
+Earlier versions called ``optimizer.step()`` after computing every term's
+gradient, which trained the real generator on whichever gradient was computed
+last (the PnL-volatility term) and gave every objective except ForGAN extra
+training epochs. The functions below now work on deep copies. The copies keep
+training on the base term only, so the measured scales follow a realistic
+training path, and the caller's models and optimizers are returned unchanged.
+"""
 from __future__ import annotations
+
+import copy
 
 import torch
 
@@ -14,9 +29,24 @@ def _gradient_norm(module: torch.nn.Module) -> torch.Tensor:
     return total.sqrt()
 
 
-def _safe_ratio(numerator: torch.Tensor, denominator: torch.Tensor) -> torch.Tensor:
-    eps = torch.finfo(numerator.dtype).eps
-    return numerator / denominator.clamp_min(eps)
+def _scale_weight(base: torch.Tensor, term: torch.Tensor) -> torch.Tensor:
+    """Median of per-batch gradient-size ratios.
+
+    A median is used rather than a mean: when a term's gradient is close to zero
+    in a few batches (common for the Sharpe term early on), the ratio for those
+    batches explodes and would dominate a mean.
+    """
+    eps = torch.finfo(base.dtype).eps
+    ratios = base / term.clamp_min(eps)
+    ratios = ratios[torch.isfinite(ratios)]
+    if ratios.numel() == 0:
+        return torch.ones((), device=base.device)
+    return ratios.median()
+
+
+def _copy_optimizer(optimizer: torch.optim.Optimizer, module: torch.nn.Module) -> torch.optim.Optimizer:
+    """Fresh optimizer of the same class and settings, bound to ``module``."""
+    return type(optimizer)(module.parameters(), **optimizer.defaults)
 
 
 def GradientCheck(
@@ -31,8 +61,12 @@ def GradientCheck(
     if train_data.shape[0] == 0:
         raise ValueError("train_data must not be empty")
 
-    gen.train()
-    disc.train()
+    work_gen = copy.deepcopy(gen)
+    work_disc = copy.deepcopy(disc)
+    work_gen_opt = _copy_optimizer(gen_opt, work_gen)
+    work_disc_opt = _copy_optimizer(disc_opt, work_disc)
+    work_gen.train()
+    work_disc.train()
     scales = [[] for _ in range(5)]
 
     for _ in range(n_epochs):
@@ -48,39 +82,38 @@ def GradientCheck(
             c0g = torch.zeros_like(h0g)
 
             for _ in range(diter):
-                disc_opt.zero_grad(set_to_none=True)
-                fake = gen(torch.randn((1, current, z_dim), device=device), condition, h0g, c0g)
-                fake_pred = disc(torch.cat((condition, fake.detach()), dim=-1), h0d, c0d)
-                real_pred = disc(torch.cat((condition, real), dim=-1), h0d, c0d)
+                work_disc_opt.zero_grad(set_to_none=True)
+                fake = work_gen(torch.randn((1, current, z_dim), device=device), condition, h0g, c0g)
+                fake_pred = work_disc(torch.cat((condition, fake.detach()), dim=-1), h0d, c0d)
+                real_pred = work_disc(torch.cat((condition, real), dim=-1), h0d, c0d)
                 dloss = (
                     criterion(fake_pred, torch.zeros_like(fake_pred))
                     + criterion(real_pred, torch.ones_like(real_pred))
                 ) / 2
                 dloss.backward()
-                disc_opt.step()
+                work_disc_opt.step()
 
-            fake = gen(torch.randn((1, current, z_dim), device=device), condition, h0g, c0g)
-            fake_pred = disc(torch.cat((condition, fake), dim=-1), h0d, c0d)
-            prediction = fake.squeeze(0).squeeze(-1)
-            target = real.squeeze(0).squeeze(-1)
-            pnl, mse, sr, std = trading_terms(prediction, target, tanh_coeff)
-            components = [
-                criterion(fake_pred, torch.ones_like(fake_pred)),
-                pnl,
-                mse,
-                sr,
-                std,
-            ]
+            fake = work_gen(torch.randn((1, current, z_dim), device=device), condition, h0g, c0g)
+            fake_pred = work_disc(torch.cat((condition, fake), dim=-1), h0d, c0d)
+            pnl, mse, sr, std = trading_terms(fake, real, tanh_coeff)
+            bce = criterion(fake_pred, torch.ones_like(fake_pred))
+            components = [bce, pnl, mse, sr, std]
 
             for index, component in enumerate(components):
-                gen_opt.zero_grad(set_to_none=True)
-                component.backward(retain_graph=index < len(components) - 1)
-                scales[index].append(_gradient_norm(gen).detach())
-            gen_opt.step()
+                work_gen_opt.zero_grad(set_to_none=True)
+                component.backward(retain_graph=True)
+                scales[index].append(_gradient_norm(work_gen).detach())
+
+            # Advance the copy with the adversarial gradient only (ForGAN-style),
+            # so later measurements come from a realistically trained generator.
+            work_gen_opt.zero_grad(set_to_none=True)
+            work_disc.zero_grad(set_to_none=True)
+            bce.backward()
+            work_gen_opt.step()
 
     if not scales[0]:
-        zero = torch.ones((), device=device)
-        return gen, disc, gen_opt, disc_opt, zero, zero, zero, zero
+        one = torch.ones((), device=device)
+        return gen, disc, gen_opt, disc_opt, one, one, one, one
 
     bce, pnl, mse, sr, std = (torch.stack(values) for values in scales)
     return (
@@ -88,10 +121,10 @@ def GradientCheck(
         disc,
         gen_opt,
         disc_opt,
-        _safe_ratio(bce, pnl).mean(),
-        _safe_ratio(bce, mse).mean(),
-        _safe_ratio(bce, sr).mean(),
-        _safe_ratio(bce, std).mean(),
+        _scale_weight(bce, pnl),
+        _scale_weight(bce, mse),
+        _scale_weight(bce, sr),
+        _scale_weight(bce, std),
     )
 
 
@@ -107,7 +140,9 @@ def GradientCheckLSTM(
     if train_data.shape[0] == 0:
         raise ValueError("train_data must not be empty")
 
-    gen.train()
+    work_gen = copy.deepcopy(gen)
+    work_opt = _copy_optimizer(gen_opt, work_gen)
+    work_gen.train()
     scales = [[] for _ in range(4)]
 
     for _ in range(n_epochs):
@@ -118,30 +153,32 @@ def GradientCheckLSTM(
             condition = batch[:, :l].unsqueeze(0).to(device=device, dtype=torch.float)
             real = batch[:, l:l + pred].unsqueeze(0).to(device=device, dtype=torch.float)
             h0 = torch.zeros((1, current, hid_g), device=device)
-            fake = gen(condition, h0, torch.zeros_like(h0))
-            prediction = fake.squeeze(0).squeeze(-1)
-            target = real.squeeze(0).squeeze(-1)
-            pnl, mse, sr, std = trading_terms(prediction, target, tanh_coeff)
+            fake = work_gen(condition, h0, torch.zeros_like(h0))
+            pnl, mse, sr, std = trading_terms(fake, real, tanh_coeff)
             components = [pnl, mse, sr, std]
 
             for index, component in enumerate(components):
-                gen_opt.zero_grad(set_to_none=True)
-                component.backward(retain_graph=index < len(components) - 1)
-                scales[index].append(_gradient_norm(gen).detach())
-            gen_opt.step()
+                work_opt.zero_grad(set_to_none=True)
+                component.backward(retain_graph=True)
+                scales[index].append(_gradient_norm(work_gen).detach())
+
+            # Advance the copy with the base (MSE) gradient only.
+            work_opt.zero_grad(set_to_none=True)
+            mse.backward()
+            work_opt.step()
 
     if not scales[0]:
-        zero = torch.ones((), device=device)
-        return gen, gen_opt, zero, torch.zeros((), device=device), zero, zero
+        one = torch.ones((), device=device)
+        return gen, gen_opt, one, torch.zeros((), device=device), one, one
 
     pnl, mse, sr, std = (torch.stack(values) for values in scales)
     return (
         gen,
         gen_opt,
-        _safe_ratio(mse, pnl).mean(),
+        _scale_weight(mse, pnl),
         torch.zeros((), device=device),
-        _safe_ratio(mse, sr).mean(),
-        _safe_ratio(mse, std).mean(),
+        _scale_weight(mse, sr),
+        _scale_weight(mse, std),
     )
 
 

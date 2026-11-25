@@ -12,6 +12,7 @@ def test_safe_stats_has_finite_nonzero_std():
 
 
 def test_project_layout_exists():
+    # results/checkpoints/ is git-ignored and created by the runner, so only the
+    # committed results directory is required here.
     root = Path(__file__).resolve().parents[1]
     assert (root / "results" / "metrics").is_dir()
-    assert (root / "results" / "checkpoints").is_dir()

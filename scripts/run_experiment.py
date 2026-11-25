@@ -35,6 +35,19 @@ def _finite_float(row: pd.Series, column: str) -> float:
     return value
 
 
+# Diagnostics copied from the selected GAN row when present. They answer the
+# question a reviewer asks first: did the model beat a constant position?
+_DIAGNOSTIC_COLUMNS = {
+    "Long share": "selected_long_share",
+    "Always-long PnL_w": "always_long_test_pnl",
+    "Always-long SR scaled": "always_long_test_scaled_sharpe",
+    "Always-short PnL_w": "always_short_test_pnl",
+    "Always-short SR scaled": "always_short_test_scaled_sharpe",
+    "PnL_w over best constant": "selected_pnl_over_best_constant",
+    "Timing SR scaled": "selected_timing_scaled_sharpe",
+}
+
+
 def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
     """Select models using validation Sharpe, then compare on the untouched test rows."""
     gan = gan.copy()
@@ -141,6 +154,11 @@ def _research_comparison(gan: pd.DataFrame, lstm: pd.DataFrame) -> pd.DataFrame:
                 "pnl_std_reduction_pct": percent_reduction(candidate_std, baseline_std),
             }
         )
+
+    for row in rows:
+        for column, name in _DIAGNOSTIC_COLUMNS.items():
+            if column in selected_fin.index:
+                row[name] = _finite_float(selected_fin, column)
 
     result = pd.DataFrame(rows)
     if result["selected_objective"].nunique() != 1:

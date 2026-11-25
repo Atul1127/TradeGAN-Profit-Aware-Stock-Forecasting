@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from .data.splits import split_train_val_test, split_train_val_testraw
+from .data.splits import split_train_val_test, split_train_val_testraw, target_start_indices
 from .evaluation.gan import Evaluation2
 from .evaluation.lstm import Evaluation2LSTM
 from .lstm_model import LSTMForecaster
@@ -152,9 +152,11 @@ def run_gan_experiment(
     for directory in (metrics, checkpoints, figures):
         directory.mkdir(parents=True, exist_ok=True)
 
-    train_np, val_np, test_np, _dates = _split_tcs(
+    train_np, val_np, test_np, dates = _split_tcs(
         ticker, root / "data", root / "stocks-etfs-list.csv", tr, vl
     )
+    # Global half-day index of the first target in each split (odd = overnight).
+    val_start, test_start = target_start_indices(len(dates), tr, vl, lookback)
     device = _device(use_gpu)
     train = torch.from_numpy(train_np).float().to(device)
     val = torch.from_numpy(val_np).float().to(device)
@@ -279,6 +281,8 @@ def run_gan_experiment(
             objective,
             False,
             mc_samples,
+            test_start=test_start,
+            val_start=val_start,
         )
         row = result_df.iloc[0].to_dict()
         row["objective"] = objective
@@ -320,9 +324,10 @@ def run_lstm_experiment(
     for directory in (metrics, checkpoints, figures):
         directory.mkdir(parents=True, exist_ok=True)
 
-    train_np, val_np, test_np, _dates = _split_tcs(
+    train_np, val_np, test_np, dates = _split_tcs(
         ticker, root / "data", root / "stocks-etfs-list.csv", tr, vl
     )
+    val_start, test_start = target_start_indices(len(dates), tr, vl, lookback)
     device = _device(use_gpu)
     train = torch.from_numpy(train_np).float().to(device)
     val = torch.from_numpy(val_np).float().to(device)
@@ -408,6 +413,8 @@ def run_lstm_experiment(
             str(figures) + "/",
             objective,
             False,
+            test_start=test_start,
+            val_start=val_start,
         )
         row = result_df.iloc[0].to_dict()
         row["objective"] = objective

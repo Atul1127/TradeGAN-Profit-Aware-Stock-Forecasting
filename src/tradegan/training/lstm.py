@@ -11,16 +11,8 @@ from collections.abc import Callable
 import matplotlib.pyplot as plt
 import torch
 
-
-def _terms(fake, real, tanh_coeff):
-    prediction = fake.squeeze(0).squeeze(-1)
-    target = real.squeeze(0).squeeze(-1)
-    pnl_samples = torch.tanh(tanh_coeff * prediction) * target
-    pnl = pnl_samples.mean()
-    mse = torch.norm(prediction - target) ** 2 / prediction.shape[0]
-    std = pnl_samples.std()
-    sr = pnl / std if torch.isfinite(std) and std.item() > 0 else pnl * 0.0
-    return pnl, mse, sr, std
+from tradegan.objectives import losses
+from tradegan.objectives.losses import trading_terms
 
 
 def _train_lstm(
@@ -101,39 +93,33 @@ def _train_lstm(
 
 
 def _lstm_mse(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, gamma, delta, tanh_coeff
-    _, mse, _, _ = _terms(fake, real, 100.0)
-    return mse
+    _, mse, _, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_mse(mse)
 
 
 def _lstm_pnl(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, gamma, delta
-    pnl, mse, _, _ = _terms(fake, real, tanh_coeff)
-    return mse - alpha * pnl
+    pnl, mse, _, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_pnl(mse, alpha, pnl)
 
 
 def _lstm_pnl_std(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, gamma
-    pnl, mse, _, std = _terms(fake, real, tanh_coeff)
-    return mse - alpha * pnl + delta * std
+    pnl, mse, _, std = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_pnl_std(mse, alpha, pnl, delta, std)
 
 
 def _lstm_pnl_sr(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, delta
-    pnl, mse, sr, _ = _terms(fake, real, tanh_coeff)
-    return mse - alpha * pnl - gamma * sr
+    pnl, mse, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_pnl_sr(mse, alpha, pnl, gamma, sr)
 
 
 def _lstm_sr(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, beta, delta
-    pnl, mse, sr, _ = _terms(fake, real, tanh_coeff)
-    return mse - gamma * sr
+    _, mse, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_sr(mse, gamma, sr)
 
 
 def _lstm_std(fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, beta, gamma
-    _, mse, _, std = _terms(fake, real, tanh_coeff)
-    return mse + delta * std
+    _, mse, _, std = trading_terms(fake, real, tanh_coeff)
+    return losses.lstm_loss_std(mse, delta, std)
 
 
 def _run(objective, *args, **kwargs):

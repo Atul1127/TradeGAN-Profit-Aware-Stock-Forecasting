@@ -12,17 +12,9 @@ from collections.abc import Callable
 import matplotlib.pyplot as plt
 import torch
 
+from tradegan.objectives import losses
+from tradegan.objectives.losses import trading_terms
 from tradegan.utils.tensors import combine_vectors
-
-
-def _gradient_norm(module: torch.nn.Module) -> float:
-    total = 0.0
-    for parameter in module.parameters():
-        if parameter.grad is None:
-            continue
-        norm = parameter.grad.detach().norm(2).item()
-        total += norm * norm
-    return total**0.5
 
 
 def _train_gan(
@@ -159,74 +151,54 @@ def _train_gan(
     return gen, disc, gen_opt, disc_opt
 
 
-def _objective_terms(fake, real, tanh_coeff):
-    prediction = fake.squeeze(0).squeeze(-1)
-    target = real.squeeze(0).squeeze(-1)
-    pnl_samples = torch.tanh(tanh_coeff * prediction) * target
-    pnl = pnl_samples.mean()
-    mse = torch.norm(prediction - target) ** 2 / prediction.shape[0]
-    std = pnl_samples.std()
-    sr = pnl / std if torch.isfinite(std) and std.item() > 0 else pnl * 0.0
-    return pnl, mse, sr, std
-
-
 def _objective_bce(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
     del fake, real, alpha, beta, gamma, delta, tanh_coeff
-    return bce
+    return losses.gan_loss_bce(bce)
 
 
 def _objective_pnl(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, gamma, delta
-    pnl, *_ = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl
+    pnl, *_ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl(bce, alpha, pnl)
 
 
 def _objective_pnl_mse(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del gamma, delta
-    pnl, mse, *_ = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl + beta * mse
+    pnl, mse, *_ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl_mse(bce, alpha, pnl, beta, mse)
 
 
 def _objective_pnl_mse_sr(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del delta
-    pnl, mse, sr, _ = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl + beta * mse - gamma * sr
+    pnl, mse, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl_mse_sr(bce, alpha, pnl, beta, mse, gamma, sr)
 
 
 def _objective_pnl_mse_std(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del gamma
-    pnl, mse, _, std = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl + beta * mse + delta * std
+    pnl, mse, _, std = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl_mse_std(bce, alpha, pnl, beta, mse, delta, std)
 
 
 def _objective_pnl_sr(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, delta
-    pnl, _, sr, _ = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl - gamma * sr
+    pnl, _, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl_sr(bce, alpha, pnl, gamma, sr)
 
 
 def _objective_mse(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, gamma, delta, tanh_coeff
-    _, mse, _, _ = _objective_terms(fake, real, 100.0)
-    return bce + beta * mse
+    _, mse, _, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_mse(bce, beta, mse)
 
 
 def _objective_sr(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, beta, delta
-    _, _, sr, _ = _objective_terms(fake, real, tanh_coeff)
-    return bce - gamma * sr
+    _, _, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_sr(bce, gamma, sr)
 
 
 def _objective_sr_mse(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del alpha, delta
-    _, mse, sr, _ = _objective_terms(fake, real, tanh_coeff)
-    return bce + beta * mse - gamma * sr
+    _, mse, sr, _ = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_sr_mse(bce, beta, mse, gamma, sr)
 
 
 def _objective_pnl_std(bce, fake, real, alpha, beta, gamma, delta, tanh_coeff):
-    del beta, gamma
-    pnl, _, _, std = _objective_terms(fake, real, tanh_coeff)
-    return bce - alpha * pnl + delta * std
+    pnl, _, _, std = trading_terms(fake, real, tanh_coeff)
+    return losses.gan_loss_pnl_std(bce, alpha, pnl, delta, std)
 
 
 def _plot_training(fake_pred, real_pred, genloss, discloss):

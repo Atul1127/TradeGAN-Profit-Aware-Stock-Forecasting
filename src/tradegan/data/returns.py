@@ -65,7 +65,27 @@ def excessreturns_closeonly(dataloc, stock, etf, plotcheck=False):
     return excessret, dates_dt
 
 
-def excessreturns(dataloc, stock, etf, plotcheck=False):
+RETURN_CLIP = 0.15
+
+
+def _half_day_dates(dates: pd.Series) -> pd.Series:
+    """One date per half-day return.
+
+    Return ``k`` ends at log-price ``k + 1`` of the interleaved
+    ``open_0, close_0, open_1, close_1, ...`` series, which belongs to day
+    ``(k + 1) // 2``. Even ``k`` is intraday, odd ``k`` is overnight.
+    """
+    return pd.Series(np.repeat(dates.to_numpy(), 2)[1:]).reset_index(drop=True)
+
+
+def excessreturns(dataloc, stock, etf, plotcheck=False, return_raw=False, clip=RETURN_CLIP):
+    """Half-day excess log returns of ``stock`` over ``etf``.
+
+    Returns ``(clipped_excess, dates)``, or ``(clipped_excess, raw_excess, dates)``
+    when ``return_raw`` is true. ``dates`` has one entry per return. The clipped
+    series is meant for model inputs and training targets; the raw series is
+    what a strategy would actually earn and should be used to score it.
+    """
     cutoff_date = pd.Timestamp("2022-01-01")
     s_df = _load_price_frame(dataloc, stock)
     e_df = _load_price_frame(dataloc, etf)
@@ -92,10 +112,13 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
     e_log[0::2] = e_logopen
     e_log[1::2] = e_logclose
 
-    s_ret = np.clip(np.diff(s_log), -0.15, 0.15)
-    e_ret = np.clip(np.diff(e_log), -0.15, 0.15)
+    s_raw = np.diff(s_log)
+    e_raw = np.diff(e_log)
+    raw_excess = s_raw - e_raw
+    s_ret = np.clip(s_raw, -clip, clip)
+    e_ret = np.clip(e_raw, -clip, clip)
     excessret = s_ret - e_ret
-    dates_dt = merged_df["date"].iloc[1:].reset_index(drop=True)
+    dates_dt = _half_day_dates(merged_df["date"])
 
     if plotcheck:
         plt.figure(figsize=(14, 6))
@@ -117,10 +140,12 @@ def excessreturns(dataloc, stock, etf, plotcheck=False):
         plt.grid(True)
         plt.show()
 
+    if return_raw:
+        return excessret, raw_excess, dates_dt
     return excessret, dates_dt
 
 
-def rawreturns(dataloc, stock, plotcheck=False):
+def rawreturns(dataloc, stock, plotcheck=False, return_raw=False, clip=RETURN_CLIP):
     s_df = _load_price_frame(dataloc, stock)
     s_df = s_df[s_df["date"] < pd.Timestamp("2022-01-01")].reset_index(drop=True)
     if len(s_df) < 2:
@@ -131,10 +156,11 @@ def rawreturns(dataloc, stock, plotcheck=False):
     s_log = np.empty(2 * len(s_df))
     s_log[0::2] = s_logopen
     s_log[1::2] = s_logclose
-    s_ret = np.clip(np.diff(s_log), -0.15, 0.15)
+    s_raw = np.diff(s_log)
+    s_ret = np.clip(s_raw, -clip, clip)
 
     # Each return is an interval endpoint: close on day i, or open on day i+1.
-    dates_dt = pd.Series(np.repeat(s_df["date"].to_numpy(), 2)[1:])
+    dates_dt = _half_day_dates(s_df["date"])
 
     if plotcheck:
         plt.figure(f"{stock} price")
@@ -149,7 +175,9 @@ def rawreturns(dataloc, stock, plotcheck=False):
         plt.xlabel("date")
         plt.ylabel("log return")
         plt.show()
-    return s_ret, dates_dt.reset_index(drop=True)
+    if return_raw:
+        return s_ret, s_raw, dates_dt
+    return s_ret, dates_dt
 
 
-__all__ = ["excessreturns_closeonly", "excessreturns", "rawreturns"]
+__all__ = ["RETURN_CLIP", "excessreturns_closeonly", "excessreturns", "rawreturns"]

@@ -35,21 +35,51 @@ def _window_data(series: np.ndarray, l: int, pred: int, h: int, split_name: str)
     return out
 
 
+def split_sizes(n_obs: int, tr: float = 0.8, vl: float = 0.1) -> tuple[int, int]:
+    """Number of observations in the training and validation splits."""
+    return int(tr * n_obs), int(vl * n_obs)
+
+
+def target_start_indices(n_obs: int, tr: float = 0.8, vl: float = 0.1, l: int = 10) -> tuple[int, int]:
+    """Global series index of the first validation and first test target.
+
+    Windows never cross a split boundary, so the first target of a split sits
+    ``l`` observations after the split starts. Even indices are intraday
+    returns and odd indices are overnight returns (see ``data.returns``).
+    """
+    n_tr, n_vl = split_sizes(n_obs, tr, vl)
+    return n_tr + l, n_tr + n_vl + l
+
+
+def _windows_with_raw_targets(clipped: np.ndarray, raw: np.ndarray, l: int, pred: int, h: int,
+                              split_name: str) -> np.ndarray:
+    """Windows whose inputs are clipped but whose targets are the raw returns."""
+    windows = _window_data(clipped, l, pred, h, split_name)
+    windows[:, l:] = _window_data(raw, l, pred, h, split_name)[:, l:]
+    return windows
+
+
+def _split_series(clipped: np.ndarray, raw: np.ndarray, tr: float, vl: float, h: int, l: int, pred: int):
+    n_tr, n_vl = split_sizes(len(clipped), tr, vl)
+    # Training uses clipped targets so a bad tick cannot dominate the loss.
+    train_data = _window_data(clipped[:n_tr], l, pred, h, "training")
+    # Validation/test score the model on raw returns: that is the PnL it would earn.
+    val_data = _windows_with_raw_targets(
+        clipped[n_tr : n_tr + n_vl], raw[n_tr : n_tr + n_vl], l, pred, h, "validation"
+    )
+    test_data = _windows_with_raw_targets(
+        clipped[n_tr + n_vl :], raw[n_tr + n_vl :], l, pred, h, "test"
+    )
+    return train_data, val_data, test_data, n_tr, n_vl
+
+
 def split_train_val_test(stock, dataloc, etflistloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotcheck=False):
     _validate_split_args(tr, vl, h, l, pred)
     etf = ETF_find(etflistloc, stock)
-    excess_returns, dates_dt = excessreturns(dataloc, stock, etf, plotcheck)
-    N = len(excess_returns)
-    N_tr = int(tr * N)
-    N_vl = int(vl * N)
-    N_tst = N - N_tr - N_vl
-    train_sr = excess_returns[:N_tr]
-    val_sr = excess_returns[N_tr : N_tr + N_vl]
-    test_sr = excess_returns[N_tr + N_vl :]
-
-    train_data = _window_data(train_sr, l, pred, h, "training")
-    val_data = _window_data(val_sr, l, pred, h, "validation")
-    test_data = _window_data(test_sr, l, pred, h, "test")
+    excess_returns, raw_excess, dates_dt = excessreturns(dataloc, stock, etf, plotcheck, return_raw=True)
+    train_data, val_data, test_data, N_tr, N_vl = _split_series(
+        excess_returns, raw_excess, tr, vl, h, l, pred
+    )
 
     if plotcheck:
         plt.figure("Excess returns")
@@ -74,18 +104,10 @@ def split_train_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotc
 
 def split_train_val_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, plotcheck=False):
     _validate_split_args(tr, vl, h, l, pred)
-    excess_returns, dates_dt = rawreturns(dataloc, stock, plotcheck)
-    N = len(excess_returns)
-    N_tr = int(tr * N)
-    N_vl = int(vl * N)
-    N_tst = N - N_tr - N_vl
-    train_sr = excess_returns[:N_tr]
-    val_sr = excess_returns[N_tr : N_tr + N_vl]
-    test_sr = excess_returns[N_tr + N_vl :]
-
-    train_data = _window_data(train_sr, l, pred, h, "training")
-    val_data = _window_data(val_sr, l, pred, h, "validation")
-    test_data = _window_data(test_sr, l, pred, h, "test")
+    excess_returns, raw_returns, dates_dt = rawreturns(dataloc, stock, plotcheck, return_raw=True)
+    train_data, val_data, test_data, N_tr, N_vl = _split_series(
+        excess_returns, raw_returns, tr, vl, h, l, pred
+    )
 
     if plotcheck:
         plt.figure("returns")
@@ -97,4 +119,10 @@ def split_train_val_testraw(stock, dataloc, tr=0.8, vl=0.1, h=1, l=10, pred=1, p
     return train_data, val_data, test_data, dates_dt
 
 
-__all__ = ["split_train_val_test", "split_train_testraw", "split_train_val_testraw"]
+__all__ = [
+    "split_sizes",
+    "split_train_val_test",
+    "split_train_testraw",
+    "split_train_val_testraw",
+    "target_start_indices",
+]

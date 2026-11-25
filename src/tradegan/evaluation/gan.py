@@ -6,24 +6,16 @@ import pandas as pd
 import torch
 
 from ..utils.trading_metrics import directional_accuracy, pnl_std
+from .common import (
+    annualised_sharpe,
+    half_day_split,
+    paired_pnl,
+    position_diagnostics,
+    safe_corr,
+)
 
 
-def _paired_pnl(pnl: torch.Tensor) -> torch.Tensor:
-    usable = 2 * (pnl.numel() // 2)
-    if usable == 0:
-        raise ValueError("At least two observations are required for paired PnL evaluation")
-    return pnl[:usable].reshape(-1, 2).sum(dim=1)
-
-
-def _safe_corr(prediction: torch.Tensor, real: torch.Tensor) -> float:
-    x = prediction.detach().cpu().numpy().reshape(-1)
-    y = real.detach().cpu().numpy().reshape(-1)
-    if x.size < 2 or np.std(x) == 0 or np.std(y) == 0:
-        return 0.0
-    return float(np.corrcoef(x, y)[0, 1])
-
-
-def _evaluate(model, data, lookback, hidden_dim, latent_dim, device, mc_samples):
+def _evaluate(model, data, lookback, hidden_dim, latent_dim, device, mc_samples, start=None):
     n = data.shape[0]
     if n == 0:
         raise ValueError("evaluation data must not be empty")
@@ -43,21 +35,23 @@ def _evaluate(model, data, lookback, hidden_dim, latent_dim, device, mc_samples)
 
     samples = torch.stack(draws)
     mean_prediction = samples.mean(dim=0)
-    signed_pnl = 10000 * torch.sign(mean_prediction) * real
-    paired = _paired_pnl(signed_pnl)
-    sharpe = paired.mean() / paired.std().clamp_min(torch.finfo(paired.dtype).eps)
+    position = torch.sign(mean_prediction)
+    signed_pnl = 10000 * position * real
+    paired = paired_pnl(signed_pnl, start)
     mse = torch.mean((mean_prediction - real) ** 2)
     mae = torch.mean(torch.abs(mean_prediction - real))
     return {
         "mean": mean_prediction,
         "samples": samples,
         "real": real,
+        "position": position,
         "pnl": signed_pnl,
         "paired_pnl": paired,
         "mse": mse,
         "rmse": torch.sqrt(mse),
         "mae": mae,
-        "sharpe": sharpe,
+        "sharpe_scaled": annualised_sharpe(paired),
+        "prob_positive": (samples > 0).float().mean(dim=0),
     }
 
 
@@ -83,27 +77,32 @@ def Evaluation2(
     f_name,
     plot=False,
     mc_samples=1000,
+    test_start=None,
+    val_start=None,
 ):
-    """Evaluate one GAN on test and validation data."""
+    """Evaluate one GAN on test and validation data.
+
+    ``test_start`` and ``val_start`` are the global half-day indices of the
+    first target in each split. When given, daily PnL is paired on real day
+    boundaries and overnight/intraday results are labelled correctly.
+    """
     del freq, h, pred, sr_val, plotsloc, f_name, plot
     if mc_samples <= 0:
         raise ValueError("mc_samples must be positive")
     if l <= 0 or hid_g <= 0 or z_dim <= 0:
         raise ValueError("lookback, hidden_dim and latent_dim must be positive")
 
-    test = _evaluate(gen, test_data, l, hid_g, z_dim, device, mc_samples)
-    val = _evaluate(gen, val_data, l, hid_g, z_dim, device, mc_samples)
+    test = _evaluate(gen, test_data, l, hid_g, z_dim, device, mc_samples, test_start)
+    val = _evaluate(gen, val_data, l, hid_g, z_dim, device, mc_samples, val_start)
 
     test_real = test["real"]
     val_real = val["real"]
     test_mean = test["mean"]
     val_mean = val["mean"]
 
-    even = test["pnl"][: 2 * (len(test["pnl"]) // 2) : 2].cpu().numpy()
-    odd = test["pnl"][1 : 2 * (len(test["pnl"]) // 2) : 2].cpu().numpy()
+    # (overnight, intraday) when test_start is known, otherwise (even, odd).
+    first_half, second_half = (x.cpu().numpy() for x in half_day_split(test["pnl"], test_start))
     distribution = test["samples"][1 if mc_samples > 1 else 0].cpu().numpy()
-
-    scale = np.sqrt(252.0)
     metrics = {
         "lrd": lrd,
         "lrg": lrg,
@@ -116,31 +115,34 @@ def Evaluation2(
         "RMSE": float(test["rmse"].item()),
         "MAE": float(test["mae"].item()),
         "PnL_w": float(test["paired_pnl"].mean().item()),
-        "SR_w scaled": float((test["sharpe"] * scale).item()),
+        "SR_w scaled": test["sharpe_scaled"],
         "PnL STD": float(pnl_std(test["paired_pnl"]).item()),
         "Directional Accuracy": float(directional_accuracy(test_mean, test_real).item()),
         "MSE val": float(val["mse"].item()),
         "RMSE val": float(val["rmse"].item()),
         "MAE val": float(val["mae"].item()),
         "PnL_w val": float(val["paired_pnl"].mean().item()),
-        "SR_w scaled val": float((val["sharpe"] * scale).item()),
+        "SR_w scaled val": val["sharpe_scaled"],
         "PnL STD val": float(pnl_std(val["paired_pnl"]).item()),
         "Directional Accuracy val": float(directional_accuracy(val_mean, val_real).item()),
-        "Corr": _safe_corr(test_mean, test_real),
-        "Corr val": _safe_corr(val_mean, val_real),
+        "Corr": safe_corr(test_mean, test_real),
+        "Corr val": safe_corr(val_mean, val_real),
         "Pos mn": float((test_mean > 0).float().mean()),
         "Neg mn": float((test_mean < 0).float().mean()),
         "Pos mn val": float((val_mean > 0).float().mean()),
         "Neg mn val": float((val_mean < 0).float().mean()),
         "narrow dist": bool(test["samples"][0].std() < 0.0002),
         "narrow means dist": bool(test_mean.std() < 0.0002),
+        "Mean P(up)": float(test["prob_positive"].mean()),
     }
+    metrics.update(position_diagnostics(test["position"], test_real, test_start))
+    metrics.update(position_diagnostics(val["position"], val_real, val_start, suffix=" val"))
 
     return (
         pd.DataFrame([metrics]),
         test["paired_pnl"].detach().cpu().numpy(),
-        even,
-        odd,
+        first_half,
+        second_half,
         test_mean.detach().cpu().numpy(),
         test_real.detach().cpu().numpy(),
         distribution,

@@ -5,14 +5,27 @@ import torch
 
 
 def trading_terms(prediction: torch.Tensor, real: torch.Tensor, tanh_coefficient: float = 100.0):
-    """Return differentiable PnL, MSE, Sharpe and volatility terms."""
+    """Return differentiable PnL, MSE, Sharpe and volatility terms.
+
+    ``prediction`` and ``real`` may be 1-D or carry the ``(1, batch, 1)`` shape
+    produced by the models; they are flattened before the terms are computed.
+    This is the single implementation used by calibration, GAN training and
+    LSTM training, so the formula tests cover the code that actually trains.
+    """
+    prediction = prediction.reshape(-1)
+    real = real.reshape(-1)
     if prediction.numel() == 0:
         raise ValueError("prediction must not be empty")
+    if prediction.shape != real.shape:
+        raise ValueError("prediction and real must contain the same number of values")
     pnl_samples = torch.tanh(tanh_coefficient * prediction) * real
     pnl = pnl_samples.mean()
     mse = torch.norm(prediction - real).square() / prediction.shape[0]
     std = pnl_samples.std()
-    sr = pnl / std.clamp_min(torch.finfo(pnl.dtype).eps)
+    eps = torch.finfo(pnl.dtype).eps
+    # A batch with (near-)constant PnL has no defined Sharpe ratio. Return zero
+    # rather than dividing by eps, which would produce an exploding gradient.
+    sr = torch.where(std > eps, pnl / std.clamp_min(eps), torch.zeros_like(pnl))
     return pnl, mse, sr, std
 
 
